@@ -2,6 +2,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 import itertools
 import pygraphviz as pgv
+import heapq
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -163,8 +164,8 @@ class Bounds():
 
     def gap_size(self, test):
 
-        upper_diff = (self.upper_bound() - test.threshold)
-        lower_diff = test.threshold - self.lower_bound()
+        upper_diff = abs(self.upper_bound() - test.threshold)
+        lower_diff = abs(test.threshold - self.lower_bound())
 
         score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
         return score_list
@@ -174,7 +175,7 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
     pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
     bounds = Bounds(test.weights)
-    #count = f'Count: {2**test.size}' if counter.is_trivial_and_count(test) else ''
+
     count = 2 ** test.size
 
     current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
@@ -200,14 +201,38 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
         form_tree(plot, reduced_test,pass_steps=pass_steps, fail_steps=fail_steps,parent_id=current_id, depth=depth + 1, counter=counter)
     plot.draw_tree("tree_plot.png")
 
-def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
-    priority_queue = []
+def bfs_form_tree(plot, test, parent_id=None, depth=0):
+    heap = []
+    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test)))
+    while heap:
+        
+        pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
+        bounds = Bounds(test.weights)
+
+        count = 2 ** test.size
+
+        current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
+        current_id = f"Node_{depth}_{test.id}"
+        if is_trivial_pass(test):
+            node_color = 'green'
+        elif is_trivial_fail(test):
+            node_color = 'red'
+        else:
+            node_color = 'black'
+        plot.add_node(current_id, current_label, color = node_color)
+
+        if parent_id is not None:
+            plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
+
+        if counter.is_trivial_and_count(test):
+            continue
+    plot.draw_tree("tree_plot.png")
 
 def steps_to_pass(test):
 
     if is_trivial_pass(test):
-        return 0
+        return -1
 
     for steps in range(1, test.size + 1):
         min_test = test
@@ -221,10 +246,10 @@ def steps_to_pass(test):
 
         if is_trivial_pass(min_test):
             return steps
-    return None
+    return 0
 def steps_to_fail(test):
     if is_trivial_fail(test):
-        return 0
+        return -1
 
     for steps in range(1, test.size + 1):
         min_test = test
@@ -239,7 +264,7 @@ def steps_to_fail(test):
         if is_trivial_fail(min_test):
             return steps
 
-    return None
+    return 0
 # graph showing upper/lower bounds of the passes and fails of the threshold test
 def pass_fail_graph(pass_list, fail_list, pruned_pass, pruned_fail, test):
     font_size = 20
@@ -272,7 +297,7 @@ def score(test):
     #scored based on how close to trivial the node is
     pass
 
-weights = [-1, 2, 4, 8, 16]
+weights = [-1, 2, 4, 8, -11]
 
 bounds = Bounds(weights)
 
@@ -284,7 +309,8 @@ step2 =  steps_to_fail(threshold_test)
 plotter = TreePlotter()
 counter = Counter(threshold_test.size)
 form_tree(plotter, threshold_test, step1,step2, counter=counter)
-plotter.draw_tree("tree_plot.png")
+#bfs_form_tree(plotter, threshold_test, counter=counter)
+#plotter.draw_tree("tree_plot.png")
 
 pFail_list, pPass_list=  counter.fail_counts, counter.pass_counts
 pass_list, fail_list = threshold_test.as_truth_table()
