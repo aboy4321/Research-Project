@@ -203,23 +203,29 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
 
 def bfs_form_tree(plot, test, parent_id=None, depth=0):
     heap = []
-    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test)))
+    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), test))
+    iteration = 0
     while heap:
-        
-        pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
+        pass_steps, fail_steps, test = heapq.heappop(heap)
 
         bounds = Bounds(test.weights)
 
         count = 2 ** test.size
 
-        current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
+        current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}, Iter. {iteration}"
         current_id = f"Node_{depth}_{test.id}"
+
         if is_trivial_pass(test):
             node_color = 'green'
         elif is_trivial_fail(test):
             node_color = 'red'
         else:
             node_color = 'black'
+            left = test.set_last_input(0)
+            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), left))
+            
+            right = test.set_last_input(1)
+            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), right))
         plot.add_node(current_id, current_label, color = node_color)
 
         if parent_id is not None:
@@ -227,6 +233,9 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0):
 
         if counter.is_trivial_and_count(test):
             continue
+        
+        
+        iteration += 1
     plot.draw_tree("tree_plot.png")
 
 def steps_to_pass(test):
@@ -316,12 +325,3 @@ pFail_list, pPass_list=  counter.fail_counts, counter.pass_counts
 pass_list, fail_list = threshold_test.as_truth_table()
 
 pass_fail_graph(pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-
-
-
-
-
-
-
-
-
