@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import itertools
 import pygraphviz as pgv
 import heapq
+import os
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -201,7 +202,7 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
         form_tree(plot, reduced_test,pass_steps=pass_steps, fail_steps=fail_steps,parent_id=current_id, depth=depth + 1, counter=counter)
     plot.draw_tree("tree_plot.png")
 
-def bfs_form_tree(plot, test, parent_id=None, depth=0):
+def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     heap = []
     heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), test))
     iteration = 0
@@ -233,7 +234,6 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0):
 
         if counter.is_trivial_and_count(test):
             continue
-        
         
         iteration += 1
     plot.draw_tree("tree_plot.png")
@@ -294,13 +294,17 @@ def pass_fail_graph(pass_list, fail_list, pruned_pass, pruned_fail, test):
     assert pass_list[-1] == fail_list[-1]
     # this is the final count
     count = pass_list[-1]
-
+    figures_dir = os.path.join("C:\\Users\\Aidan\\devOp\\Research-Project", "Figures")
+    
+    
     plt.plot(pass_list,color='blue')
     plt.plot(fail_list,color='red')
     plt.plot(pruned_fail,color='red' , linestyle= '--')
     plt.plot(pruned_pass,color='blue' , linestyle= '--')
     plt.axhline(y=count, linestyle='--', color="purple")
-    plt.show()
+    save_path = os.path.join(figures_dir, "pass_fail_plot.png")
+    plt.savefig(save_path, dpi=300)
+    plt.close()  # Close the figure to free memory
 
 def score(test):
     #scored based on how close to trivial the node is
