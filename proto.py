@@ -19,6 +19,9 @@ class ThresholdTest:
         new_id = cls.id_counter
         cls.id_counter += 1
         return new_id
+    def __lt__(self,other):
+        return self.id < other.id
+    
     def __repr__(self):
 
         #printing threshold
@@ -56,8 +59,6 @@ class ThresholdTest:
 
             print(f"{c}, {satisfied}")
         return pass_list, fail_list
-
-    #def
 
     def set_last_input(self, value):
         assert self.weights
@@ -171,7 +172,7 @@ class Bounds():
         score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
         return score_list
 
-def form_tree(plot, test, pass_steps, fail_steps, parent_id, depth=0, counter=None):
+def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, counter=None):
 
     pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
@@ -203,12 +204,11 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id, depth=0, counter=No
     plot.draw_tree("tree_plot.png")
     
 def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
-    breaker = 0
     heap = []
-    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), breaker, test))
+    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), test))
     iteration = 0
     while heap:
-        pass_steps, fail_steps, breaker, test= heapq.heappop(heap)
+        pass_steps, fail_steps, test= heapq.heappop(heap)
 
         bounds = Bounds(test.weights)
 
@@ -227,18 +227,13 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             node_color = 'red'
         else:
             node_color = 'black'
-            breaker += 1
             left = test.set_last_input(0)
-            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), breaker, left))
+            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left) , left))
             
-
-            
-            breaker += 1
             right = test.set_last_input(1)
-            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), breaker, right))
+            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), right))
             plot.add_edge(current_id, f"Node_{depth + 1}_{left.id}", label=f"x_{test.size + 1}")
             plot.add_edge(current_id, f"Node_{depth + 1}_{right.id}", label=f"x_{test.size + 1}")
-        print(f"Adding edge from {parent_id} to {current_id} for {test}")
 
         plot.add_node(current_id, current_label, color = node_color)
 
