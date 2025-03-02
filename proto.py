@@ -39,7 +39,7 @@ class ThresholdTest:
 
         all_combinations = list(itertools.product([0, 1], repeat=self.size))
         headers = [f"X_{i + 1}" for i in (range(self.size))]
-        print("|".join(headers) + "|Result")
+        #print("|".join(headers) + "|Result")
 
         #iterating through all possible combinations
         for c in all_combinations:
@@ -57,7 +57,7 @@ class ThresholdTest:
                 pass_list.append(passed)
             #printing combinations seperated by lines for readability
 
-            print(f"{c}, {satisfied}")
+            #print(f"{c}, {satisfied}")
         return pass_list, fail_list
 
     def set_last_input(self, value):
@@ -205,10 +205,10 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
     
 def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     heap = []
-    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), test))
+    heapq.heappush(heap, (steps_to_pass(test), steps_to_fail(test), test,parent_id, depth))
     iteration = 0
     while heap:
-        pass_steps, fail_steps, test= heapq.heappop(heap)
+        pass_steps, fail_steps, test, parent_id, depth= heapq.heappop(heap)
 
         bounds = Bounds(test.weights)
 
@@ -219,23 +219,20 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
         
         if is_trivial_pass(test):
             node_color = 'green'
-            if parent_id is not None:
-                plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
+            
         elif is_trivial_fail(test):
-            if parent_id is not None:
-                plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
+            
             node_color = 'red'
         else:
             node_color = 'black'
-            left = test.set_last_input(0)
-            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left) , left))
             
+            left = test.set_last_input(0)
             right = test.set_last_input(1)
-            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), right))
-            plot.add_edge(current_id, f"Node_{depth + 1}_{left.id}", label=f"x_{test.size + 1}")
-            plot.add_edge(current_id, f"Node_{depth + 1}_{right.id}", label=f"x_{test.size + 1}")
+            
+            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), left, current_id, depth + 1))
+            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), right, current_id, depth + 1))
 
-        plot.add_node(current_id, current_label, color = node_color)
+        plot.add_node(current_id, current_label, color=node_color)
 
         if parent_id is not None:
             plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
