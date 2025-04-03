@@ -113,7 +113,11 @@ class TreePlotter():
 
     # Function to add edges to the nodes, from parent to child
     def add_edge(self,  parent_id, child_id, label):
-        self.graph.add_edge(parent_id, child_id, label=f"<{label}>")
+        value = label[-1]
+        style = "solid" if value == "1" else "dashed"
+
+        self.graph.add_edge(parent_id, child_id, label=f"<{label}>", style = style)
+        
        # edge_count = 0
        # edge_count += 1
     # Draws the actual tree and saves the image as a .png file
@@ -227,7 +231,6 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
 def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
-   # initial_priority = min(steps_to_pass(test), steps_to_fail(test))
     # Creating and "pushing" our priorities to the heap
     iteration = 0
     cache = {}
@@ -237,17 +240,17 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             cache[key] = function(test)
         return cache[key]
     initial_priority = min(cached(test, steps_to_pass), cached(test, steps_to_fail))
-    heapq.heappush(heap, (initial_priority,depth, test, parent_id))
+    heapq.heappush(heap, (initial_priority,depth, test, parent_id, None))
 
     # "while" The heap has values within itself
     while heap:
         # Removes the smallest of these variables from the heap and returns it
-        priority,depth, test, parent_id = heapq.heappop(heap)
+        priority,depth, test, parent_id, edge_label = heapq.heappop(heap)
         pass_steps = steps_to_pass(test)
         fail_steps = steps_to_fail(test)
         # Information added onto the nodes within the tree
         bounds = Bounds(test.weights)
-
+        value = None
         count = 2 ** test.size
 
         current_label = f"{test} (\nIter. {iteration})"
@@ -267,27 +270,22 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             
             left = test.set_last_input(0)
             right = test.set_last_input(1)
-           # left_priority = min(steps_to_pass(left), steps_to_fail(left))
-           # right_priority = min(steps_to_pass(right), steps_to_fail(right))
             left_priority = min(cached(left, steps_to_pass), cached(left, steps_to_fail))
             right_priority = min(cached(right, steps_to_pass), cached(right, steps_to_fail))
 
-            heapq.heappush(heap, (left_priority,depth+1, left, current_id))
-            
-            heapq.heappush(heap, (right_priority,depth+1, right, current_id))
-        
+            heapq.heappush(heap, (left_priority,depth+1, left, current_id, f"0"))
+            heapq.heappush(heap, (right_priority,depth+1, right, current_id,f"1"))
         # Adding nodes to tree
         plot.add_node(current_id, current_label, color=node_color)
-        iteration +=1 
+        iteration += 1
+
         # While there are still parents within the tree, add edges
         if parent_id is not None:
-            plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB>")
+            plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
         # When the test/node is trivial, continue and don't make computations upon the already trivial test
         if counter.is_trivial_and_count(test):
             continue
         
-        # A count just to check for effiency :)
-        #iteration += 1
     
     # Draws the tree
     plot.draw_tree("tree_plot.png")
@@ -355,19 +353,19 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     # Final count of the lists
     count = pass_list[-1]
    
-    plt.plot(pass_list,color='blue')
-    plt.plot(fail_list,color='red')
-    plt.plot(pruned_fail,color='red' , linestyle= '--')
-    plt.plot(pruned_pass,color='blue' , linestyle= '--')
-    plt.plot(bfs_pass, color='purple', linestyle='--')
-    plt.plot(bfs_fail,color='purple', linestyle='--') 
-    plt.axhline(y=count, linestyle='--', color="purple")
+    plt.plot(pass_list,color='blue',linestyle='-')
+    plt.plot(fail_list,color='red', linestyle='-')
+    plt.plot(pruned_fail,color='red' , linestyle= '-')
+    plt.plot(pruned_pass,color='blue' , linestyle= '-')
+    plt.plot(bfs_pass, color='magenta', linestyle='-')
+    plt.plot(bfs_fail,color='purple', linestyle='-') 
+    plt.axhline(y=count, linestyle='--', color="black")
 
     plt.show()
 
 
-weights = [-1, 2, 4, 8, -11]
-#weights = [-2, 3, -4, 5]
+#weights = [-1,-2, 2, 4, 8, -11]
+weights = [-2, 3, -4, 5]
 #weights = [-30, 4, 8, 22, 9, 12, -17]
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
 
@@ -399,4 +397,3 @@ execute = end - start
 print(f'{execute}')
 bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-
