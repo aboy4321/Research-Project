@@ -3,6 +3,7 @@ from matplotlib import pyplot as plt
 import itertools
 import pygraphviz as pgv
 import heapq
+from timer import Timer
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -365,11 +366,12 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
 
 #weights = [-1,-2, 2, 4, 8, -11]
-weights = [-2, 3, -4, 5]
+#weights = [-2, 3, -4, 5]
 #weights = [-30, 4, 8, 22, 9, 12, -17]
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
-
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
+weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
+
 weights = sorted(weights,key=lambda x: abs(x))
 bounds = Bounds(weights)
 
@@ -379,21 +381,18 @@ threshold_test = ThresholdTest(weights, threshold)
 step1 =  steps_to_pass(threshold_test)
 step2 =  steps_to_fail(threshold_test)
 plotter = TreePlotter()
-counter = Counter(threshold_test.size)
 bfs_counter = Counter(threshold_test.size)
-form_tree(plotter, threshold_test, step1,step2, counter=counter)
 
-pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
-pass_list, fail_list = threshold_test.as_truth_table()
-import time
-start = time.perf_counter()
+with Timer("dfs"):
+    counter = Counter(threshold_test.size)
+    form_tree(plotter, threshold_test, step1,step2, counter=counter)
+    pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
 
-bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
+with Timer("truth table"):
+    pass_list, fail_list = threshold_test.as_truth_table()
 
-end = time.perf_counter()
+with Timer("bfs"):
+    bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
+    bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 
-execute = end - start
-
-print(f'{execute}')
-bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
