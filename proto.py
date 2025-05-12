@@ -18,6 +18,7 @@ class ThresholdTest:
         new_id = cls.id_counter
         cls.id_counter += 1
         return new_id
+
     def __lt__(self,other):
         return self.id < other.id
     
@@ -196,7 +197,7 @@ class Bounds():
         return score_list
 
 # Function used to create the pruned tree using a depth-first search algorithm
-def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, counter=None):
+def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     
     # Displaying important values onto the nodes (mainly steps to pass and fail)
     pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
@@ -226,7 +227,7 @@ def form_tree(plot, test, pass_steps, fail_steps, parent_id=None, depth=0, count
        
         # Recursion, adds upon the depth of the tree
         reduced_test = test.set_last_input(next_value)
-        form_tree(plot, reduced_test,pass_steps=pass_steps, fail_steps=fail_steps,parent_id=current_id, depth=depth + 1, counter=counter)
+        form_tree(plot, reduced_test,parent_id=current_id, depth=depth + 1, counter=counter)
     
     #plot.draw_tree("tree_plot.png")
 
@@ -388,15 +389,12 @@ bounds = Bounds(weights)
 threshold = 1
 threshold_test = ThresholdTest(weights, threshold)
 
-step1 =  steps_to_pass(threshold_test)
-step2 =  steps_to_fail(threshold_test)
-
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
 
 with Timer("dfs"):
     counter = Counter(threshold_test.size)
-    form_tree(plotter, threshold_test, step1,step2, counter=counter)
+    form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
 
 with Timer("truth table"):
