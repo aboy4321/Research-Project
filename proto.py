@@ -1,9 +1,8 @@
-import matplotlib
-from matplotlib import pyplot as plt
 import itertools
-import pygraphviz as pgv
 import heapq
 from timer import Timer
+
+PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -102,9 +101,16 @@ def print_tree(test, depth=0):
     reduced_test = test.set_last_input(next_value)
     print_tree(reduced_test, depth + 1)
 
+class NullPlotter:
+    def __init__(self): pass
+    def add_node(self, node_id, label, color): pass
+    def add_edge(self,  parent_id, child_id, label): pass
+    def draw_tree(self, filename="tree_plot.png"): pass
+
 # Class used for the making of the decision tree, utilizes pygraphviz
 class TreePlotter():
     def __init__(self):
+        import pygraphviz as pgv
         # Initializing a graph, in this case being a strict one
         self.graph = pgv.AGraph(strict=True, directed=False)
 
@@ -331,6 +337,9 @@ def steps_to_fail(test):
 
 # The BFS, DFS and raw values are taken as parameters
 def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, pruned_fail, test):
+    import matplotlib
+    from matplotlib import pyplot as plt
+
     font_size = 20
 
     matplotlib.rcParams.update({'xtick.labelsize': font_size,
@@ -371,6 +380,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
 weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
+#weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 
 weights = sorted(weights,key=lambda x: abs(x))
 bounds = Bounds(weights)
@@ -380,8 +390,9 @@ threshold_test = ThresholdTest(weights, threshold)
 
 step1 =  steps_to_pass(threshold_test)
 step2 =  steps_to_fail(threshold_test)
-plotter = TreePlotter()
-bfs_counter = Counter(threshold_test.size)
+
+if PLOT_SEARCH_SPACE: plotter = TreePlotter()
+else:                 plotter = NullPlotter()
 
 with Timer("dfs"):
     counter = Counter(threshold_test.size)
@@ -392,7 +403,8 @@ with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
 
 with Timer("bfs"):
+    bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 
-pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
+#pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
