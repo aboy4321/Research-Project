@@ -202,11 +202,9 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     # Displaying important values onto the nodes (mainly steps to pass and fail)
     pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
-    bounds = Bounds(test.weights)
-
-    count = 2 ** test.size
-
-    current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
+    #bounds = Bounds(test.weights)
+    #count = 2 ** test.size
+    #current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
     current_id = f"Node_{depth}_{test.id}"
     if is_trivial_pass(test):
         node_color = 'green'
@@ -224,10 +222,9 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
 
     # Iterates between the binary inputs of 0 and 1
     for next_value in [1, 0]:
-       
         # Recursion, adds upon the depth of the tree
         reduced_test = test.set_last_input(next_value)
-        form_tree(plot, reduced_test,parent_id=current_id, depth=depth + 1, counter=counter)
+        form_tree(plot, reduced_test,parent_id=current_id, depth=depth+1, counter=counter)
     
     #plot.draw_tree("tree_plot.png")
 
@@ -236,11 +233,14 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
 # NOTE: Will be going through this function step-by-step
 
 
+
 def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
     # Creating and "pushing" our priorities to the heap
     iteration = 0
+
+    """
     cache = {}
     def cached(test, function):
         key = (test.id, function.__name__)
@@ -248,29 +248,29 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             cache[key] = function(test)
         return cache[key]
     initial_priority = min(cached(test, steps_to_pass), cached(test, steps_to_fail))
-    heapq.heappush(heap, (initial_priority,depth, test, parent_id, None))
+    """
+
+    def compute_priority(test):
+        return min(steps_to_pass(test), steps_to_fail(test))
+
+    initial_priority = compute_priority(test)
+    heapq.heappush(heap, (initial_priority, depth, test, parent_id, None))
 
     # "while" The heap has values within itself
     while heap:
         # Removes the smallest of these variables from the heap and returns it
-        priority,depth, test, parent_id, edge_label = heapq.heappop(heap)
+        priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
         pass_steps = steps_to_pass(test)
         fail_steps = steps_to_fail(test)
-        # Information added onto the nodes within the tree
-        bounds = Bounds(test.weights)
-        value = None
-        count = 2 ** test.size
 
-        current_label = f"{test} (\nIter. {iteration})"
-        current_id = f"Node_{depth}_{test.id}"
-        
+        current_id = f"Node_{depth}_{test.id}"        
+
         # Setting colors of the nodes based off passing or failing
         if is_trivial_pass(test): 
             node_color = 'green'
             
         elif is_trivial_fail(test):       
             node_color = 'red'
-        
         # The bread and butter of this function. Using how close a test is to triviality, takes priority upon
         # the node that is closer (in this case being closer to passing) and pushes that value onto the heap
         else:
@@ -278,18 +278,22 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             
             left = test.set_last_input(0)
             right = test.set_last_input(1)
-            left_priority = min(cached(left, steps_to_pass), cached(left, steps_to_fail))
-            right_priority = min(cached(right, steps_to_pass), cached(right, steps_to_fail))
+            left_priority = compute_priority(left)
+            right_priority = compute_priority(right)
 
             heapq.heappush(heap, (left_priority,depth+1, left, current_id, f"0"))
             heapq.heappush(heap, (right_priority,depth+1, right, current_id,f"1"))
-        # Adding nodes to tree
-        plot.add_node(current_id, current_label, color=node_color)
-        iteration += 1
 
-        # While there are still parents within the tree, add edges
-        if parent_id is not None:
-            plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
+        if PLOT_SEARCH_SPACE:
+            current_label = f"{test} (\nIter. {iteration})"
+            # Adding nodes to tree
+            plot.add_node(current_id, current_label, color=node_color)
+
+            # While there are still parents within the tree, add edges
+            if parent_id is not None:
+                plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
+
+        iteration += 1
         # When the test/node is trivial, continue and don't make computations upon the already trivial test
         if counter.is_trivial_and_count(test):
             continue
@@ -380,12 +384,11 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 #weights = [-30, 4, 8, 22, 9, 12, -17]
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
-weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
+#weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-
+n = 16
+weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
-bounds = Bounds(weights)
-
 threshold = 1
 threshold_test = ThresholdTest(weights, threshold)
 
@@ -397,8 +400,9 @@ with Timer("dfs"):
     form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
 
-with Timer("truth table"):
-    pass_list, fail_list = threshold_test.as_truth_table()
+#with Timer("truth table"):
+#    pass_list, fail_list = threshold_test.as_truth_table()
+pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
