@@ -6,11 +6,25 @@ PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
-    def __init__(self, weights, threshold):
+    def __init__(self, weights, threshold, size=None, bounds=None):
         #establishing variables
         self.weights = weights
         self.threshold = threshold
-        self.size = len(weights)
+
+        # instead of copying weights over and over again,
+        # we use the same weights list and just vary the size
+        if size is None:
+            self.size = len(weights)
+        else:
+            self.size = size
+
+        # it is faster to update the bounds externally instead of
+        # re-computing them each time
+        if bounds is None:
+            self.bounds = Bounds.from_weights(weights,size)
+        else:
+            self.bounds = bounds
+
         self.id = ThresholdTest.new_id()
 
     @classmethod
@@ -23,15 +37,37 @@ class ThresholdTest:
         return self.id < other.id
     
     def __repr__(self):
-
         #printing threshold
         # Creates a representation of the threshold test inside of the tree
-        root = " + ".join([f"{weight}*x<SUB>{var+1}</SUB>" for var, weight in enumerate(self.weights)])
-        root = f"{root} &#8805; {self.threshold}"
-        if not self.weights:
+        weights = self.get_weights()
+        if not weights:
             return f"0 &#8805; {self.threshold}"
+        root = " + ".join([f"{weight}*x<SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
+        root = f"{root} &#8805; {self.threshold}"
         return root
-    
+
+    def get_weights(self):
+        # try not to use this function
+        return self.weights[:self.size]
+
+    def get_last_weight(self):
+        # note that weights may be longer than size
+        # (this is to avoid re-copying the weights in set_last_input()
+        return self.weights[self.size-1]
+
+    # Functions testing for triviality:
+    def is_trivial_fail(self):
+        lower,upper = self.bounds.get_bounds()
+        threshold = self.threshold
+        # True if the lower and upper are both less than the threshold
+        return lower <= upper < threshold
+
+    def is_trivial_pass(self):
+        lower,upper = self.bounds.get_bounds()
+        threshold = self.threshold
+        # True if both the lower and upper are greater than the threshold
+        return threshold <= lower <= upper
+  
     # Form_tree (pruned tree) is based off this truth table
     def as_truth_table(self):
         passed = 0
@@ -43,10 +79,12 @@ class ThresholdTest:
         headers = [f"X_{i + 1}" for i in (range(self.size))]
         #print("|".join(headers) + "|Result")
 
+        weights = self.get_weights()
+
         #iterating through all possible combinations
         for c in all_combinations:
             #sums the weighted inputs from the combinations
-            weighted_sum = sum(weight * inputs for weight, inputs in zip(self.weights, c))
+            weighted_sum = sum(weight * inputs for weight, inputs in zip(weights, c))
             #satisfied variable returns True if test is passed and False otherwise
             satisfied = weighted_sum >= self.threshold
 
@@ -65,17 +103,58 @@ class ThresholdTest:
     
     # Function used to compute the threshold test
     def set_last_input(self, value):
-        assert self.weights
+        assert self.size > 0
+        last_weight = self.get_last_weight()
+
+        # update threshold
         #when values in path are set to 1
         if value == 1:
-            last_input = self.weights[-1]
-            new_threshold = (self.threshold - last_input)
-            new_weights = self.weights[:-1]
+            new_threshold = self.threshold - last_weight
         #when values in path are set to 0
         elif value == 0:
-            new_weights = self.weights[:-1]
             new_threshold = self.threshold
-        return ThresholdTest(new_weights, new_threshold)
+
+        # update bounds
+        lb,ub = self.bounds.get_bounds()
+        if last_weight > 0:
+            ub -= last_weight
+        else:
+            lb -= last_weight
+        bounds = Bounds(lb,ub)
+
+        return ThresholdTest(self.weights, new_threshold, size=self.size-1, bounds=bounds)
+
+# Class used to measure the upper and lower bounds of the threshold test    
+class Bounds():
+    def __init__(self, lb, ub):
+        self.lb = lb
+        self.ub = ub
+
+    @classmethod
+    def from_weights(cls,weights,size):
+        lb,ub = 0,0
+        for weight in weights[:size]:
+            if weight < 0: lb += weight
+            if weight > 0: ub += weight
+        return cls(lb,ub)
+
+    def upper_bound(self):
+        return self.ub
+
+    def lower_bound(self):
+        return self.lb
+
+    def get_bounds(self):
+        return self.lb,self.ub
+
+    # Measures the differences of the upper and lower bound from the respective threshold
+    def gap_size(self, test):
+
+        upper_diff = abs(self.upper_bound() - test.threshold)
+        lower_diff = abs(test.threshold - self.lower_bound())
+
+        score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
+        return score_list
 
 # Functions previously used to display the computations the threshold test was making
 def print_path(test, values, depth=0):
@@ -90,9 +169,10 @@ def print_path(test, values, depth=0):
     reduced_test = test.set_last_input(next_value)
     print_path(reduced_test, values[:-1], depth + 1)
     # ideally recursive
+
 def print_tree(test, depth=0):
     print("  " * depth + str(test))
-    if not test.weights:
+    if test.size == 0:
         return
 
     next_value = 0
@@ -133,24 +213,6 @@ class TreePlotter():
         self.graph.layout(prog="dot")
         self.graph.draw(filename)
 
-# Functions testing for triviality:
-
-def is_trivial_fail(test):
-    bounds = Bounds(test.weights)
-    upper = bounds.upper_bound()
-    lower = bounds.lower_bound()
-    threshold = test.threshold
-    # True if the lower and upper are both less than the threshold
-    return lower <= upper < threshold
-
-def is_trivial_pass(test):
-    bounds = Bounds(test.weights)
-    upper = bounds.upper_bound()
-    lower = bounds.lower_bound()
-    threshold = test.threshold
-    # True if both the lower and upper are greater than the threshold
-    return threshold <= lower <= upper
-
 # Class used to create an array of pass and fails 
 class Counter():
     def __init__(self,test_size):
@@ -164,51 +226,31 @@ class Counter():
     # Using previous functions of triviality, counts passes and fails
     def is_trivial_and_count(self,test):
         total_counts = 2 ** test.size
-        if is_trivial_pass(test):
+        if test.is_trivial_pass():
             self.passes += total_counts
             self.pass_counts.append(self.passes)
             self.fail_counts.append(self.fails)
             return True
-        if is_trivial_fail(test):
+        if test.is_trivial_fail():
             self.fails += total_counts
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
             return True
         return False
 
-# Class used to measure the upper and lower bounds of the threshold test    
-class Bounds():
-    def __init__(self, weights):
-        self.weights = weights
-
-    def upper_bound(self):
-        return sum(w for w in self.weights if w > 0)
-
-    def lower_bound(self):
-        return sum(w for w in self.weights if w <= 0)
-
-    # Measures the differences of the upper and lower bound from the respective threshold
-    def gap_size(self, test):
-
-        upper_diff = abs(self.upper_bound() - test.threshold)
-        lower_diff = abs(test.threshold - self.lower_bound())
-
-        score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
-        return score_list
-
 # Function used to create the pruned tree using a depth-first search algorithm
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     
     # Displaying important values onto the nodes (mainly steps to pass and fail)
-    pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
+    #pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
     #bounds = Bounds(test.weights)
     #count = 2 ** test.size
     #current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
     current_id = f"Node_{depth}_{test.id}"
-    if is_trivial_pass(test):
+    if test.is_trivial_pass():
         node_color = 'green'
-    elif is_trivial_fail(test):
+    elif test.is_trivial_fail():
         node_color = 'red'
     else:
         node_color = 'black'
@@ -260,16 +302,13 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     while heap:
         # Removes the smallest of these variables from the heap and returns it
         priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
-        pass_steps = steps_to_pass(test)
-        fail_steps = steps_to_fail(test)
 
         current_id = f"Node_{depth}_{test.id}"        
 
         # Setting colors of the nodes based off passing or failing
-        if is_trivial_pass(test): 
+        if test.is_trivial_pass(): 
             node_color = 'green'
-            
-        elif is_trivial_fail(test):       
+        elif test.is_trivial_fail():       
             node_color = 'red'
         # The bread and butter of this function. Using how close a test is to triviality, takes priority upon
         # the node that is closer (in this case being closer to passing) and pushes that value onto the heap
@@ -281,8 +320,8 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             left_priority = compute_priority(left)
             right_priority = compute_priority(right)
 
-            heapq.heappush(heap, (left_priority,depth+1, left, current_id, f"0"))
-            heapq.heappush(heap, (right_priority,depth+1, right, current_id,f"1"))
+            heapq.heappush(heap, (left_priority,  depth+1, left,  current_id, f"0"))
+            heapq.heappush(heap, (right_priority, depth+1, right, current_id, f"1"))
 
         if PLOT_SEARCH_SPACE:
             current_label = f"{test} (\nIter. {iteration})"
@@ -297,46 +336,51 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
         # When the test/node is trivial, continue and don't make computations upon the already trivial test
         if counter.is_trivial_and_count(test):
             continue
-        
+        # ^^Function continues until heap is empty^^        
     
     # Draws the tree
     plot.draw_tree("tree_plot.png")
 
-# ^^Function continues until heap is empty^^
-
 # Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
 def steps_to_pass(test):
-    
-    for steps in range(0, test.size + 1):
-        min_test = test
-        for i in range(steps):
-            if min_test.weights[-1] == 0:
-                min_test = min_test.set_last_input(0)
-            elif min_test.weights[-1] < 0:
-                min_test = min_test.set_last_input(0)
-            elif min_test.weights[-1] > 0:
-                min_test = min_test.set_last_input(1)
+    weights = test.weights
+    T = test.threshold
+    size = test.size
 
-        if is_trivial_pass(min_test):
-            return steps
-    return 123456
+    lb,ub = test.bounds.get_bounds()
+    steps = 0
+    while True:
+        if T <= lb: return steps
+        steps += 1
+        weight = weights[size-steps]
+        if weight < 0:
+            # set input to 0
+            lb -= weight
+        else:
+            # set input to 1
+            T -= weight
+            ub -= weight
+
 def steps_to_fail(test):
-    
-    for steps in range(0, test.size + 1):
-        min_test = test
-        for _ in range(steps):
-            if min_test.weights[-1] == 0:
-                min_test = min_test.set_last_input(0)
-            elif min_test.weights[-1] < 0:
-                min_test = min_test.set_last_input(1)
-            elif min_test.weights[-1] > 0:
-                min_test = min_test.set_last_input(0)
+    weights = test.weights
+    T = test.threshold
+    size = test.size
 
-        if is_trivial_fail(min_test):
-            return steps
-    #inf
-    return 123456
+    lb,ub = test.bounds.get_bounds()
+    steps = 0
+    while True:
+        if ub < T: return steps
+        steps += 1
+        weight = weights[size-steps]
+        if weight < 0:
+            # set input to 1
+            T -= weight
+            lb -= weight
+        else:
+            # set input to 0
+            ub -= weight
+
 # Graph showing the upper and lower bounds of the threshold test, and the steps taken to reach that number
 # Mainly going to be used to show the efficiency of our algorithm
 
@@ -386,7 +430,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
 #weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-n = 16
+n = 18
 weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
 threshold = 1
@@ -409,4 +453,4 @@ with Timer("bfs"):
     bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 
-#pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
+pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
