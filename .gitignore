@@ -1,4 +1,8 @@
-__pycache__
+__pycache__/
+*.py[cod]
+*$py.class
+*.swo
+*.swp
 *.png
 .proto.py
 .vscode
