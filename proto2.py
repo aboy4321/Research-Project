@@ -2,7 +2,7 @@ import itertools
 import heapq
 from timer import Timer
 
-PLOT_SEARCH_SPACE = False
+PLOT_SEARCH_SPACE = True
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -214,29 +214,49 @@ class TreePlotter():
         self.graph.draw(filename)
 
 # Class used to create an array of pass and fails 
-class Counter():
-    def __init__(self,test_size):
-        # initializing variables
+class Counter:
+    def __init__(self, test_size):
         self.test_size = test_size
         self.passes = 0
         self.fails = 0
         self.pass_counts = [0]
         self.fail_counts = [0]
-    
-    # Using previous functions of triviality, counts passes and fails
-    def is_trivial_and_count(self,test):
+        self.node_pass_counts = {}  # key = (depth, threshold), value = pass count
+
+    def is_trivial_and_count(self, test, key=None):
         total_counts = 2 ** test.size
         if test.is_trivial_pass():
             self.passes += total_counts
             self.pass_counts.append(self.passes)
             self.fail_counts.append(self.fails)
+            if key:
+                self.node_pass_counts[key] = total_counts
             return True
         if test.is_trivial_fail():
             self.fails += total_counts
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
+            if key:
+                self.node_pass_counts[key] = 0
             return True
         return False
+
+    def count_passing_inputs(self, test, key=None):
+        count = 0
+        weights = test.weights
+        threshold = test.threshold
+        size = test.size
+        all_combinations = list(itertools.product([0,1], repeat=size))        
+
+        for c in all_combinations:
+            weighted_sum = sum(weights * inputs for weights, inputs in zip(weights, c))
+            satisfied = weighted_sum >= threshold
+            if satisfied:
+               count += 1 
+        if key:
+            self.node_pass_counts[key] = count
+        return count
+
 
 # Function used to create the pruned tree using a depth-first search algorithm
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
@@ -296,15 +316,15 @@ def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
     while heap:
         # Removes the smallest of these variables from the heap and returns it
         priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
-        current_id = f"Node_{depth}_{test.threshold}"
+        current_id = f"Node_{depth}_{test.id}"
+        count = counter.count_passing_inputs(test)
                         
         key = (depth, test.threshold)
         # Check if test has already been processed at this depth
         if key in seen:
-            current_id = f"Node_{depth}_{test.threshold}"
 
             if PLOT_SEARCH_SPACE:
-                current_label = f"{test} (\nIter. {iteration})"
+                current_label = f"{test} (\nIter. {iteration})(\nCount {count})"
                 plot.add_node(current_id, current_label, color=node_color)
                 iteration += 1
                 if parent_id is not None:
@@ -331,7 +351,7 @@ def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
             heapq.heappush(heap, (left_priority,  depth+1, left,  current_id, f"0"))
             heapq.heappush(heap, (right_priority, depth+1, right, current_id, f"1"))
         if PLOT_SEARCH_SPACE:
-            current_label = f"{test} (\nIter. {iteration})"
+            current_label = f"{test} (\nIter. {iteration}) (\nCount {count})"
             # Adding nodes to tree
             plot.add_node(current_id, current_label, color=node_color)
             iteration += 1
@@ -341,6 +361,8 @@ def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
         # When the test/node is trivial, continue and don't make computations upon the already trivial test
         if counter.is_trivial_and_count(test):
             continue
+
+        #print(counter.count_passing_inputs(test))
         # ^^Function continues until heap is empty^^        
     # Draws the tree
     plot.draw_tree("tree_plot.png")
@@ -428,14 +450,14 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
 
 #weights = [-1,-2, 2, 4, 8, -11]
-#weights = [-2, 3, -4, 5]
+weights = [-2, 3, -4, 5]
 #weights = [-30, 4, 8, 22, 9, 12, -17]
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
 #weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-n = 784
-weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+#n = 4
+#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
 threshold = 1
 threshold_test = ThresholdTest(weights, threshold)
