@@ -25,6 +25,11 @@ class ThresholdTest:
         else:
             self.bounds = bounds
 
+        # children
+        self.lo = None
+        self.hi = None
+
+        # unique id
         self.id = ThresholdTest.new_id()
 
     @classmethod
@@ -296,7 +301,7 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
 
 
 
-def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
+def bfs_form_tree(plot, test, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
     # after pop, key is created which is the depth, then the threshold, (depth, threshold) , the value of the key is the threshold test
@@ -310,62 +315,35 @@ def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
         return min(steps_to_pass(test), steps_to_fail(test))
 
     initial_priority = compute_priority(test)
-    heapq.heappush(heap, (initial_priority, depth, test, parent_id, None))
+    heapq.heappush(heap, (initial_priority, 0, test, None, None))
 
     # "while" The heap has values within itself
     while heap:
         # Removes the smallest of these variables from the heap and returns it
-        priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
-        current_id = f"Node_{depth}_{test.id}"
-        count = counter.count_passing_inputs(test)
-                        
+        priority, depth, test, parent_test, edge_label = heapq.heappop(heap)
+
+        if parent_test is not None:
+            if edge_label == 0:
+                parent_test.lo = test
+            else: # edge_label == 1:
+                parent_test.hi = test
+
         key = (depth, test.threshold)
         # Check if test has already been processed at this depth
-        if key in seen:
-
-            if PLOT_SEARCH_SPACE:
-                current_label = f"{test} (\nIter. {iteration})(\nCount {count})"
-                plot.add_node(current_id, current_label, color=node_color)
-                iteration += 1
-                if parent_id is not None:
-                    plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
-            continue  
-
-        seen[key] = test    # Mark this (depth, threshold) combo as seen
-    
-        # Setting colors of the nodes based off passing or failing
-        if test.is_trivial_pass(): 
-            node_color = 'green'
-        elif test.is_trivial_fail():       
-            node_color = 'red'
-        # The bread and butter of this function. Using how close a test is to triviality, takes priority upon
-        # the node that is closer (in this case being closer to passing) and pushes that value onto the heap
-        else:
-            node_color = 'black'
-            
+        if key not in seen:
             left = test.set_last_input(0)
             right = test.set_last_input(1)
             left_priority = compute_priority(left)
             right_priority = compute_priority(right)
+            heapq.heappush(heap, (left_priority,  depth+1, left,  test, 0))
+            heapq.heappush(heap, (right_priority, depth+1, right, test, 1))
+            seen[key] = test    # Mark this (depth, threshold) combo as seen
 
-            heapq.heappush(heap, (left_priority,  depth+1, left,  current_id, f"0"))
-            heapq.heappush(heap, (right_priority, depth+1, right, current_id, f"1"))
-        if PLOT_SEARCH_SPACE:
-            current_label = f"{test} (\nIter. {iteration}) (\nCount {count})"
-            # Adding nodes to tree
-            plot.add_node(current_id, current_label, color=node_color)
-            iteration += 1
-            # While there are still parents within the tree, add edges
-            if parent_id is not None:
-                plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
-        # When the test/node is trivial, continue and don't make computations upon the already trivial test
         if counter.is_trivial_and_count(test):
             continue
 
         #print(counter.count_passing_inputs(test))
         # ^^Function continues until heap is empty^^        
-    # Draws the tree
-    plot.draw_tree("tree_plot.png")
 
 # Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
@@ -476,7 +454,7 @@ pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 """
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
-    bfs_form_tree(plotter, threshold_test, threshold, counter=bfs_counter)
+    bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
