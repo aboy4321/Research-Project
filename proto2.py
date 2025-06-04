@@ -42,7 +42,7 @@ class ThresholdTest:
         weights = self.get_weights()
         if not weights:
             return f"0 &#8805; {self.threshold}"
-        root = " + ".join([f"{weight}*x<SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
+        root = " + ".join([f"{weight}*X<SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
         root = f"{root} &#8805; {self.threshold}"
         return root
 
@@ -221,42 +221,50 @@ class Counter:
         self.fails = 0
         self.pass_counts = [0]
         self.fail_counts = [0]
-        self.node_pass_counts = {}  # key = (depth, threshold), value = pass count
+        self.count = 0
+        self.seen = {}
 
-    def is_trivial_and_count(self, test, key=None):
+    def is_trivial_and_count(self, test):
         total_counts = 2 ** test.size
         if test.is_trivial_pass():
             self.passes += total_counts
             self.pass_counts.append(self.passes)
             self.fail_counts.append(self.fails)
-            if key:
-                self.node_pass_counts[key] = total_counts
             return True
         if test.is_trivial_fail():
             self.fails += total_counts
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
-            if key:
-                self.node_pass_counts[key] = 0
             return True
         return False
 
     def count_passing_inputs(self, test, key=None):
+        if test.is_trivial_pass():
+            return 2 ** test.size
+        if test.is_trivial_fail():
+            return 0
+        
+        if key and key in self.seen:
+            count = self.seen[key]
+            return count
+        
         count = 0
         weights = test.weights
         threshold = test.threshold
         size = test.size
-        all_combinations = list(itertools.product([0,1], repeat=size))        
-
+        all_combinations = itertools.product([0, 1], repeat=size)
+        
         for c in all_combinations:
-            weighted_sum = sum(weights * inputs for weights, inputs in zip(weights, c))
-            satisfied = weighted_sum >= threshold
-            if satisfied:
-               count += 1 
+            weighted_sum = sum(w * x for w, x in zip(weights, c))
+            if weighted_sum >= threshold:
+                count += 1
+        
+        # Update internal counters
+        
         if key:
-            self.node_pass_counts[key] = count
+            self.seen[key] = count
         return count
-
+ 
 
 # Function used to create the pruned tree using a depth-first search algorithm
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
@@ -267,7 +275,7 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     #bounds = Bounds(test.weights)
     #count = 2 ** test.size
     #current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
-    current_id = f"Node_{depth}_{test.threshold}"
+    current_id = f"Node_{depth}_{test.id}"
     if test.is_trivial_pass():
         node_color = 'green'
     elif test.is_trivial_fail():
@@ -294,14 +302,33 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
 # with the use of heaps
 # NOTE: Will be going through this function step-by-step
 
+def model_count(test, depth, cache = {}):
+    key = (depth, test.threshold, tuple(test.weights))
+    if key in cache: return cache[key]
 
+    if test.is_trivial_pass():
+        count = 2 ** test.size
+    elif test.is_trivial_fail():
+        count= 0
+    else:
+        high_test = test.set_last_input(1)
+        high_count = model_count(high_test, depth + 1, cache)
 
-def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
+        low_test = test.set_last_input(0)
+        low_count = model_count(low_test, depth+1, cache)
+
+        count = high_count + low_count
+    cache[key] = count
+    return count
+
+def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
     # after pop, key is created which is the depth, then the threshold, (depth, threshold) , the value of the key is the threshold test
     # check key, if not there then add to cache, if there then do not check or add, just add edge (if plot search space)
     seen = {}
+    model_cache = {}
+    node_ids = {}
 
     # Creating and "pushing" our priorities to the heap
     iteration = 0
@@ -317,29 +344,26 @@ def bfs_form_tree(plot, test, threshold, parent_id=None, depth=0, counter=None):
         # Removes the smallest of these variables from the heap and returns it
         priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
         current_id = f"Node_{depth}_{test.id}"
-        count = counter.count_passing_inputs(test)
-                        
         key = (depth, test.threshold)
+        """
         # Check if test has already been processed at this depth
         if key in seen:
-
             if PLOT_SEARCH_SPACE:
                 current_label = f"{test} (\nIter. {iteration})(\nCount {count})"
-                plot.add_node(current_id, current_label, color=node_color)
                 iteration += 1
+                plot.add_node(current_id, current_label, color=node_color)
                 if parent_id is not None:
                     plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
             continue  
-
-        seen[key] = test    # Mark this (depth, threshold) combo as seen
-    
+        seen[key] = test # Mark this (depth, threshold) combo as seen
+        """
+        count = model_count(test, depth, model_cache)
+        #count = 0
         # Setting colors of the nodes based off passing or failing
         if test.is_trivial_pass(): 
             node_color = 'green'
         elif test.is_trivial_fail():       
             node_color = 'red'
-        # The bread and butter of this function. Using how close a test is to triviality, takes priority upon
-        # the node that is closer (in this case being closer to passing) and pushes that value onto the heap
         else:
             node_color = 'black'
             
@@ -449,17 +473,21 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     plt.show()
 
 
-#weights = [-1,-2, 2, 4, 8, -11]
-weights = [-2, 3, -4, 5]
+#weights = [-1,-2, 2, 4, 8, -11]:
+#weights = [-2, 3, -4, 5]
 #weights = [-30, 4, 8, 22, 9, 12, -17]
+#weights = [1, 2, 3, -2]
 #weights = [-12, 15, -8, 6, -23, 30, -4, 18, -9, 11]
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
 #weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-#n = 4
-#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+n = 6
+# For the graph there are (2 * x) - 2 nodes
+weights = [ 1**x for x in range(n) ] 
+#+ [ 1**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
-threshold = 1
+threshold = 3
+
 threshold_test = ThresholdTest(weights, threshold)
 
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
@@ -476,7 +504,7 @@ pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 """
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
-    bfs_form_tree(plotter, threshold_test, threshold, counter=bfs_counter)
+    bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
