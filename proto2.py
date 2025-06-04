@@ -2,7 +2,11 @@ import itertools
 import heapq
 from timer import Timer
 
-PLOT_SEARCH_SPACE = True
+#import sys
+#sys.setrecursionlimit(2048)
+
+
+PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -25,6 +29,11 @@ class ThresholdTest:
         else:
             self.bounds = bounds
 
+        # children
+        self.lo = None
+        self.hi = None
+
+        # unique id
         self.id = ThresholdTest.new_id()
 
     @classmethod
@@ -124,6 +133,54 @@ class ThresholdTest:
 
         return ThresholdTest(self.weights, new_threshold, size=self.size-1, bounds=bounds)
 
+    def _all_nodes(self,cache=None,only_internal=False):
+        # returns a set containing all nodes induced by a threshold test
+        if cache is None: cache = set()
+        if self.id in cache: return cache
+
+        if only_internal:
+            # a node is leaf if both lo and hi are None
+            # otherwise, we call it an internal node
+            if self.lo is None and self.hi is None:
+                return cache
+        cache.add(self.id)
+
+        if self.lo is not None:
+            cache = self.lo._all_nodes(cache=cache,only_internal=only_internal)
+        if self.hi is not None:
+            cache = self.hi._all_nodes(cache=cache,only_internal=only_internal)
+        return cache
+
+    def node_count(self,only_internal=False):
+        return len(self._all_nodes(only_internal=only_internal))
+
+    def tree_node_count(self,only_internal=False):
+        if only_internal:
+            if self.lo is None and self.hi is None:
+                return 0
+        count = 1
+        if self.lo is not None:
+            count += self.lo.tree_node_count(only_internal=only_internal)
+        if self.hi is not None:
+            count += self.hi.tree_node_count(only_internal=only_internal)
+        return count
+
+    def model_count(self,cache=None):
+        if cache is None: cache = {}
+        if self.id in cache:
+            return cache[self.id]
+
+        if self.is_trivial_pass():
+            count = 2 ** self.size
+        elif self.is_trivial_fail():
+            count = 0
+        else:
+            count = 0
+            count += self.lo.model_count(cache=cache)
+            count += self.hi.model_count(cache=cache)
+
+        cache[self.id] = count
+        return count
 # Class used to measure the upper and lower bounds of the threshold test    
 class Bounds():
     def __init__(self, lb, ub):
@@ -205,13 +262,34 @@ class TreePlotter():
         style = "solid" if value == "1" else "dashed"
 
         self.graph.add_edge(parent_id, child_id, label=f"<{label}>", style = style)
-        
+
        # edge_count = 0
        # edge_count += 1
     # Draws the actual tree and saves the image as a .png file
-    def draw_tree(self, filename="tree_plot.png"):
+    def draw_tree(self, test, filename="tree_plot.png"):
+        self._draw_tree(test)
         self.graph.layout(prog="dot")
         self.graph.draw(filename)
+
+    def _draw_tree(self, test, depth=0, parent_id=None, edge_label=None):
+        current_id = f"Node_{depth}_{test.id}"
+        current_label = f"{test}"
+
+        if test.is_trivial_pass(): 
+            node_color = 'green'
+        elif test.is_trivial_fail():       
+            node_color = 'red'
+        else:
+            node_color = 'black'
+
+        self.add_node(current_id, current_label, color=node_color)
+        if parent_id is not None:
+            edge_label = f"x<SUB>{test.size + 1}</SUB> = {edge_label}"
+            self.add_edge(parent_id, current_id, label=edge_label)
+        if test.lo is not None:
+            self._draw_tree(test.lo,depth=depth+1,parent_id=current_id,edge_label=0)
+        if test.hi is not None:
+            self._draw_tree(test.hi,depth=depth+1,parent_id=current_id,edge_label=1)
 
 # Class used to create an array of pass and fails 
 class Counter:
@@ -314,6 +392,7 @@ def model_count(test, depth, cache = {}):
         high_test = test.set_last_input(1)
         high_count = model_count(high_test, depth + 1, cache)
 
+<<<<<<< HEAD
         low_test = test.set_last_input(0)
         low_count = model_count(low_test, depth+1, cache)
 
@@ -322,6 +401,9 @@ def model_count(test, depth, cache = {}):
     return count
 
 def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
+=======
+def bfs_form_tree(test, counter=None):
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
     # Initializing an empty heap array we will be iterating upon:
     heap = []
     # after pop, key is created which is the depth, then the threshold, (depth, threshold) , the value of the key is the threshold test
@@ -337,17 +419,23 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
         return min(steps_to_pass(test), steps_to_fail(test))
 
     initial_priority = compute_priority(test)
-    heapq.heappush(heap, (initial_priority, depth, test, parent_id, None))
+    heapq.heappush(heap, (initial_priority, 0, test, None, None))
 
     # "while" The heap has values within itself
     while heap:
         # Removes the smallest of these variables from the heap and returns it
+<<<<<<< HEAD
         priority, depth, test, parent_id, edge_label = heapq.heappop(heap)
         current_id = f"Node_{depth}_{test.id}"
+=======
+        priority, depth, test, parent_test, edge_label = heapq.heappop(heap)
+
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
         key = (depth, test.threshold)
         """
         # Check if test has already been processed at this depth
         if key in seen:
+<<<<<<< HEAD
             if PLOT_SEARCH_SPACE:
                 current_label = f"{test} (\nIter. {iteration})(\nCount {count})"
                 iteration += 1
@@ -364,32 +452,33 @@ def bfs_form_tree(plot, test, parent_id=None, depth=0, counter=None):
             node_color = 'green'
         elif test.is_trivial_fail():       
             node_color = 'red'
-        else:
-            node_color = 'black'
-            
-            left = test.set_last_input(0)
-            right = test.set_last_input(1)
-            left_priority = compute_priority(left)
-            right_priority = compute_priority(right)
+=======
+            test = seen[key]
 
-            heapq.heappush(heap, (left_priority,  depth+1, left,  current_id, f"0"))
-            heapq.heappush(heap, (right_priority, depth+1, right, current_id, f"1"))
-        if PLOT_SEARCH_SPACE:
-            current_label = f"{test} (\nIter. {iteration}) (\nCount {count})"
-            # Adding nodes to tree
-            plot.add_node(current_id, current_label, color=node_color)
-            iteration += 1
-            # While there are still parents within the tree, add edges
-            if parent_id is not None:
-                plot.add_edge(parent_id, current_id, label=f"x<SUB>{test.size + 1}</SUB> = {edge_label}")
-        # When the test/node is trivial, continue and don't make computations upon the already trivial test
-        if counter.is_trivial_and_count(test):
-            continue
+            if parent_test is not None:
+                if edge_label == 0: parent_test.lo = test
+                else:               parent_test.hi = test
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
+        else:
+            seen[key] = test # Mark this (depth, threshold) combo as seen
+
+            if parent_test is not None:
+                if edge_label == 0: parent_test.lo = test
+                else:               parent_test.hi = test
+
+            if counter.is_trivial_and_count(test):
+                pass
+            else:
+                # add children to priority queue
+                left = test.set_last_input(0)
+                right = test.set_last_input(1)
+                left_priority = compute_priority(left)
+                right_priority = compute_priority(right)
+                heapq.heappush(heap, (left_priority, depth+1,left, test,0))
+                heapq.heappush(heap, (right_priority,depth+1,right,test,1))
 
         #print(counter.count_passing_inputs(test))
         # ^^Function continues until heap is empty^^        
-    # Draws the tree
-    plot.draw_tree("tree_plot.png")
 
 # Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
@@ -473,7 +562,11 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     plt.show()
 
 
+<<<<<<< HEAD
 #weights = [-1,-2, 2, 4, 8, -11]:
+=======
+#weights = [-1,-2, 2, 4, 8, -11]
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
 #weights = [-2, 3, -4, 5]
 #weights = [-30, 4, 8, 22, 9, 12, -17]
 #weights = [1, 2, 3, -2]
@@ -481,6 +574,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 #weights = [1, -1, 2, -2, 4,-4, 8 -8, 3, -2, 1]
 #weights = [64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
+<<<<<<< HEAD
 n = 6
 # For the graph there are (2 * x) - 2 nodes
 weights = [ 1**x for x in range(n) ] 
@@ -488,8 +582,14 @@ weights = [ 1**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
 threshold = 3
 
+=======
+n = 5
+#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+weights = [1]*n
+weights = sorted(weights,key=lambda x: abs(x))
+threshold = 2
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
 threshold_test = ThresholdTest(weights, threshold)
-
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
 """
@@ -504,7 +604,19 @@ pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 """
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
+<<<<<<< HEAD
     bfs_form_tree(plotter, threshold_test, counter=bfs_counter)
+=======
+    bfs_form_tree(threshold_test, counter=bfs_counter)
+>>>>>>> 3433ab795b8866047f6d39b22925df127c428a43
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts
+
+#plotter.draw_tree(threshold_test, filename="tree_plot.png")
+print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
+print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
+print(f"formula:                     {threshold*n-(threshold-1)*threshold}")
+print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
+print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
+print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
