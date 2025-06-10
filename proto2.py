@@ -526,9 +526,6 @@ def bfs_form_tree(test, counter=None):
         #print(counter.count_passing_inputs(test))
         # ^^Function continues until heap is empty^^        
 
-    import pdb ; pdb.set_trace()
-    pass
-
 # Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
 def steps_to_pass(test):
