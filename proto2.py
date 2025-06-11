@@ -362,6 +362,7 @@ class Counter:
 
         test._data = counts
         Counter._add_counts(test._counts,counts)
+
         # assumes ThresholdTest._data is set to zero
         for parent in test.parents:
             Counter._add_counts(parent._data,test._data)
@@ -471,6 +472,12 @@ def model_count(test, depth, cache = {}):
     cache[key] = count
     return count
 
+def compute_priority_A(test):
+    return min(steps_to_pass(test), steps_to_fail(test))
+
+def compute_priority_R(test):
+    return steps_to_pass(test)
+
 def bfs_form_tree(test, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
@@ -498,6 +505,7 @@ def bfs_form_tree(test, counter=None):
 
             if parent_test is not None:
                 # there must be a parent in this case
+
                 if edge_label == 0: parent_test.lo = test
                 else:               parent_test.hi = test
                 test.parents.append(parent_test)
@@ -524,7 +532,28 @@ def bfs_form_tree(test, counter=None):
                 heapq.heappush(heap, (left_priority, depth+1,left, test,0))
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
         #print(counter.count_passing_inputs(test))
-        # ^^Function continues until heap is empty^^        
+        # ^^Function continues until heap is empty^^     
+
+def old_bfs(test, counter=None):
+    heap = []
+    depth = 0
+    p = steps_to_pass(test)
+    f = steps_to_fail(test)
+
+    heapq.heappush(heap,(p,f, depth, test, None, None))
+
+    while heap:
+        p, f, depth, test, parent_id, edge_label = heapq.heappop(heap)
+
+        if counter.is_trivial_and_count_old(test):
+            pass
+        else:
+            left = test.set_last_input(0)
+            right = test.set_last_input(1)
+
+
+            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), depth+1, left, test, 0))
+            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), depth + 1, right, test, 1))
 
 # Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
@@ -605,8 +634,11 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     plt.plot(bfs_fail,color='purple', linestyle='-') 
     plt.axhline(y=count, linestyle='--', color="black")
 
+    plt.xscale('log')
+
+
     plt.show()
-def pass_fail_graph2(bfs_pass, bfs_fail, pruned_pass, pruned_fail, test):
+def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test):
     import matplotlib
     from matplotlib import pyplot as plt
 
@@ -625,6 +657,7 @@ def pass_fail_graph2(bfs_pass, bfs_fail, pruned_pass, pruned_fail, test):
     # Flipping the fail_list to start at the top and count down
     pruned_fail = [total - fail for fail in pruned_fail] 
     bfs_fail = [total - fail for fail  in bfs_fail]
+    old_bfs_fail = [total - fail for fail in old_bfs_fail]
     
     # Makes sure pass_list and flipped fail_list meet at the same endpoint
     
@@ -635,20 +668,23 @@ def pass_fail_graph2(bfs_pass, bfs_fail, pruned_pass, pruned_fail, test):
     plt.plot(pruned_pass,color='blue' , linestyle= '-')
     plt.plot(bfs_pass, color='magenta', linestyle='-')
     plt.plot(bfs_fail,color='purple', linestyle='-') 
+    plt.plot(old_bfs_pass, color="green", linestyle='-')
+    plt.plot(old_bfs_fail, color='lime', linestyle='-')
     plt.axhline(y=count, linestyle='--', color="black")
+    plt.xscale("log")
 
+    print(F"BFS OLD: {old_bfs_pass}")
+    print(f"BFS NEW: {bfs_pass}")
     plt.show()
 #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
 # For the graph there are (2 * x) - 2 nodes
 
-n = 20
-n = 16
+n = 10
 #weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = [1]*n
 weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
-threshold =5
-threshold = 9
+threshold = 15
 threshold_test = ThresholdTest(weights, threshold)
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
@@ -657,10 +693,17 @@ with Timer("dfs"):
     counter = Counter(threshold_test.size)
     form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
+
+"""
 with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
+"""
 
+with Timer("old_bfs"):
+    old_bfs_counter = Counter(threshold_test.size)
+    old_bfs(threshold_test, counter=old_bfs_counter)
+    old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
@@ -674,4 +717,4 @@ print(f"formula 2:                   {math.comb(n+1, threshold) - 1}")
 print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
 print(f"model count: {threshold_test.model_count()}")
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-pass_fail_graph2(bfsPass_list, bfsFail_list, pPass_list, pFail_list, threshold_test)
+pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
