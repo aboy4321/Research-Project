@@ -29,9 +29,10 @@ class ThresholdTest:
         else:
             self.bounds = bounds
 
-        # children
+        # children and parents
         self.lo = None
         self.hi = None
+        self.parents = []
 
         # unique id
         self.id = ThresholdTest.new_id()
@@ -136,14 +137,15 @@ class ThresholdTest:
     def _all_nodes(self,cache=None,only_internal=False):
         # returns a set containing all nodes induced by a threshold test
         if cache is None: cache = set()
-        if self.id in cache: return cache
+        key = self.id # can be (depth,threshold)
+        if key in cache: return cache
 
         if only_internal:
             # a node is leaf if both lo and hi are None
             # otherwise, we call it an internal node
             if self.lo is None and self.hi is None:
                 return cache
-        cache.add(self.id)
+        cache.add(key)
 
         if self.lo is not None:
             cache = self.lo._all_nodes(cache=cache,only_internal=only_internal)
@@ -302,7 +304,7 @@ class Counter:
         self.count = 0
         self.seen = {}
     
-    def is_trivial_and_count(self, test):
+    def is_trivial_and_count_old(self, test):
         total_counts = 2 ** test.size
         if test.is_trivial_pass():
             self.passes += total_counts
@@ -315,6 +317,77 @@ class Counter:
             self.pass_counts.append(self.passes)
             return True
         return False
+
+    def is_trivial_and_count(self, test):
+        total_counts = 2 ** test.size
+        if test.is_trivial_pass():
+            root_counts = self._propagate_count(test,[total_counts,0])
+            self.passes += root_counts[0]
+            self.pass_counts.append(self.passes)
+            self.fail_counts.append(self.fails)
+            return True
+        if test.is_trivial_fail():
+            root_counts = self._propagate_count(test,[0,total_counts])
+            self.fails += root_counts[1]
+            self.fail_counts.append(self.fails)
+            self.pass_counts.append(self.passes)
+            return True
+        return False
+
+    def cache_count(self, test, parent_test):
+        counts = test._counts
+        if counts[0] + counts[1] == 0:
+            # nothing to update
+            return
+        root_counts = self._propagate_count(parent_test,counts)
+        self.passes += root_counts[0]
+        self.fails += root_counts[1]
+        self.pass_counts.append(self.passes)
+        self.fail_counts.append(self.fails)
+
+    @classmethod
+    def _add_counts(cls,a,b):
+        a[0] += b[0]
+        a[1] += b[1]
+
+    def _propagate_count(self, test, counts):
+        from collections import deque
+        queue = deque()
+        visited_tests = list()
+        visited_ids = set()
+
+        # initialize visited list
+        visited_tests.append(test)
+        visited_ids.add(test.id)
+
+        test._data = counts
+        Counter._add_counts(test._counts,counts)
+        # assumes ThresholdTest._data is set to zero
+        for parent in test.parents:
+            Counter._add_counts(parent._data,test._data)
+            Counter._add_counts(parent._counts,test._data)
+        queue.extend(test.parents)
+
+        while queue:
+            test = queue.popleft()
+
+            if test.id in visited_ids: continue
+            visited_tests.append(test)
+            visited_ids.add(test.id)
+
+            for parent in test.parents:
+                Counter._add_counts(parent._data,test._data)
+                Counter._add_counts(parent._counts,test._data)
+            queue.extend(test.parents)
+
+        count = test._data # this is the count on the root node
+
+        # reset data field
+        for test in visited_tests:
+            test._data = [0,0]
+
+        return count
+
     def count_passing_inputs(self, test, key=None):
         if test.is_trivial_pass():
             return 2 ** test.size
@@ -364,7 +437,7 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     #if parent_id is not None:
         #plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
 
-    if counter.is_trivial_and_count(test):
+    if counter.is_trivial_and_count_old(test):
         return
 
     # Iterates between the binary inputs of 0 and 1
@@ -424,14 +497,20 @@ def bfs_form_tree(test, counter=None):
             test = seen[key]
 
             if parent_test is not None:
+                # there must be a parent in this case
                 if edge_label == 0: parent_test.lo = test
                 else:               parent_test.hi = test
+                test.parents.append(parent_test)
+                counter.cache_count(test,parent_test)
         else:
             seen[key] = test # Mark this (depth, threshold) combo as seen
-            
+            test._data = [0,0]   # initialize temp data
+            test._counts = [0,0] #
+
             if parent_test is not None:
                 if edge_label == 0: parent_test.lo = test
                 else:               parent_test.hi = test
+                test.parents.append(parent_test)
 
             if counter.is_trivial_and_count(test):
                 pass                
@@ -563,10 +642,13 @@ def pass_fail_graph2(bfs_pass, bfs_fail, pruned_pass, pruned_fail, test):
 # For the graph there are (2 * x) - 2 nodes
 
 n = 20
+n = 16
+#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = [1]*n
 weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
 threshold =5
+threshold = 9
 threshold_test = ThresholdTest(weights, threshold)
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
@@ -575,21 +657,20 @@ with Timer("dfs"):
     counter = Counter(threshold_test.size)
     form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
-"""
 with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-"""
+
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
 #plotter.draw_tree(threshold_test, filename="tree_plot.png")
-print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
+#print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
 print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
 print(f"formula:                     {threshold*n-((threshold-1)*threshold)}")
 print(f"formula 2:                   {math.comb(n+1, threshold) - 1}")
-print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
+#print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
 print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
 print(f"model count: {threshold_test.model_count()}")
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
