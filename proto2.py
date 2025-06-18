@@ -6,7 +6,7 @@ import math
 #sys.setrecursionlimit(2048)
 
 
-PLOT_SEARCH_SPACE = True
+PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -55,6 +55,34 @@ class ThresholdTest:
         root = " + ".join([f"{weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
         root = f"{root} &#8805; {self.threshold}"
         return root
+
+    @staticmethod
+    def parse(st):
+        """Parse a neuron string format"""
+        neuron = {}
+        for line in st.split('\n'):
+            line = line.strip()
+            if not line: continue
+            field,value = line.split(':')
+            field = field.strip()
+            value = value.strip()
+            neuron[field] = value
+        assert "size" in neuron
+        assert "threshold" in neuron # or "bias" in neuron
+        assert "weights" in neuron
+
+        weights = list(map(int,neuron["weights"].split()))
+        weights = sorted(weights,key=lambda x: abs(x))
+        threshold = int(neuron["threshold"])
+
+        return ThresholdTest(weights,threshold)
+
+    @staticmethod
+    def read(filename):
+        """Read a neuron from file"""
+        with open(filename,'r') as f:
+            st = f.read()
+        return ThresholdTest.parse(st)
 
     def get_weights(self):
         # try not to use this function
@@ -697,8 +725,8 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     plt.axhline(y=count, linestyle='--', color="black")
     plt.xscale("log")
 
-    print(F"BFS OLD: {old_bfs_pass}")
-    print(f"BFS NEW: {bfs_pass}")
+    #print(F"BFS OLD: {old_bfs_pass}")
+    #print(f"BFS NEW: {bfs_pass}")
     plt.show()
     #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
     # For the graph there are (2 * x) - 2 nodes
@@ -706,10 +734,13 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
 n = 10
 #weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = [1]*n
-weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
-threshold = 15
+threshold = 5
 threshold_test = ThresholdTest(weights, threshold)
+
+filename = "data/digits/neuron/digits-0-1.neuron"
+threshold_test = ThresholdTest.read(filename)
+
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
 
@@ -742,4 +773,4 @@ print(f"formula 2:                   {math.comb(n+1, threshold) - 1}")
 print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
 print(f"model count: {threshold_test.model_count()}")
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
+#pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
