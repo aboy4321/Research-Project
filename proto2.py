@@ -7,7 +7,7 @@ import time
 #sys.setrecursionlimit(2048)
 
 
-PLOT_SEARCH_SPACE = False
+PLOT_SEARCH_SPACE = True
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -56,34 +56,6 @@ class ThresholdTest:
         root = " + ".join([f"{weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
         root = f"{root} &#8805; {self.threshold}"
         return root
-
-    @staticmethod
-    def parse(st):
-        """Parse a neuron string format"""
-        neuron = {}
-        for line in st.split('\n'):
-            line = line.strip()
-            if not line: continue
-            field,value = line.split(':')
-            field = field.strip()
-            value = value.strip()
-            neuron[field] = value
-        assert "size" in neuron
-        assert "threshold" in neuron # or "bias" in neuron
-        assert "weights" in neuron
-
-        weights = list(map(int,neuron["weights"].split()))
-        weights = sorted(weights,key=lambda x: abs(x))
-        threshold = int(neuron["threshold"])
-
-        return ThresholdTest(weights,threshold)
-
-    @staticmethod
-    def read(filename):
-        """Read a neuron from file"""
-        with open(filename,'r') as f:
-            st = f.read()
-        return ThresholdTest.parse(st)
 
     def get_weights(self):
         # try not to use this function
@@ -274,77 +246,53 @@ class NullPlotter:
     def __init__(self): pass
     def add_node(self, node_id, label, color): pass
     def add_edge(self,  parent_id, child_id, label): pass
-    def draw_tree(self, test, filename): pass
-    def draw_graph(self, test, filename): pass
+    def draw_tree(self, filename="tree_plot.png"): pass
 
 # Class used for the making of the decision tree, utilizes pygraphviz
 class TreePlotter():
     def __init__(self):
-        pass
+        import pygraphviz as pgv
+        # Initializing a graph, in this case being a strict one
+        self.graph = pgv.AGraph(strict=True, directed=False)
 
     # Function used to add nodes to the tree:
-    def add_node(self, test, node_id):
-        label = f"{test}"
-        if test.is_trivial_pass():
-            color = 'green'
-        elif test.is_trivial_fail():
-            color = 'red'
-        else:
-            color = 'black'
+    def add_node(self, node_id, label, color):
         self.graph.add_node(node_id, label=f"<{label}>", shape='box', color=color)
 
     # Function to add edges to the nodes, from parent to child
-    def add_edge(self, test, parent_id, child_id, value):
+    def add_edge(self,  parent_id, child_id, label):
+        value = label[-1]
         style = "solid" if value == "1" else "dashed"
-        label = f"<I>X</I><SUB>{test.size + 1}</SUB> = {value}"
-        self.graph.add_edge(parent_id, child_id, label=f"<{label}>", style=style)
 
+        self.graph.add_edge(parent_id, child_id, label=f"<{label}>", style = style)
+
+       # edge_count = 0
+       # edge_count += 1
     # Draws the actual tree and saves the image as a .png file
-    def draw_tree(self, test, filename):
-        import pygraphviz
-        self.graph = pygraphviz.AGraph(strict=True, directed=False)
-        self.counter = 0
+    def draw_tree(self, test, filename="tree_plot.png"):
         self._draw_tree(test)
         self.graph.layout(prog="dot")
         self.graph.draw(filename)
 
-    def _draw_tree(self, test, depth=0, parent_id=None, edge_value=None):
-        current_id = f"Node_{depth}_{self.counter}"
-        self.counter += 1
+    def _draw_tree(self, test, depth=0, parent_id=None, edge_label=None):
+        current_id = f"Node_{depth}_{test.id}"
+        current_label = f"{test}"
 
-        self.add_node(test, current_id)
-        if parent_id is not None:
-            self.add_edge(test, parent_id, current_id, value=edge_value)
-
-        if test.lo is not None:
-            self._draw_tree(test.lo,depth=depth+1,parent_id=current_id,edge_value=0)
-        if test.hi is not None:
-            self._draw_tree(test.hi,depth=depth+1,parent_id=current_id,edge_value=1)
-
-    # Draws the actual tree and saves the image as a .png file
-    def draw_graph(self, test, filename):
-        import pygraphviz
-        self.graph = pygraphviz.AGraph(strict=True, directed=False)
-        cache = {}
-        self._draw_graph(test,cache)
-        self.graph.layout(prog="dot")
-        self.graph.draw(filename)
-
-    def _draw_graph(self, test, cache, depth=0, parent_id=None, edge_value=None):
-        current_id = f"Node_{depth}_{test.threshold}"
-        key = (depth,test.threshold)
-        if key in cache:
-            test = cache[key]
+        if test.is_trivial_pass(): 
+            node_color = 'green'
+        elif test.is_trivial_fail():       
+            node_color = 'red'
         else:
-            self.add_node(test, current_id)
-            if test.lo is not None:
-                self._draw_graph(test.lo,cache,depth=depth+1,parent_id=current_id,edge_value=0)
-            if test.hi is not None:
-                self._draw_graph(test.hi,cache,depth=depth+1,parent_id=current_id,edge_value=1)
-            cache[key] = test
+            node_color = 'black'
 
+        self.add_node(current_id, current_label, color=node_color)
         if parent_id is not None:
-            self.add_edge(test, parent_id, current_id, value=edge_value)
+            edge_label = f"<I>X</I><SUB>{test.size + 1}</SUB> = {edge_label}"
+            self.add_edge(parent_id, current_id, label=edge_label)
+        if test.lo is not None:
+            self._draw_tree(test.lo,depth=depth+1,parent_id=current_id,edge_label=0)
+        if test.hi is not None:
+            self._draw_tree(test.hi,depth=depth+1,parent_id=current_id,edge_label=1)
 
 # Class used to create an array of pass and fails 
 class Counter:
@@ -356,12 +304,9 @@ class Counter:
         self.fail_counts = [0]
         self.count = 0
         self.seen = {}
-
-        
         self.start_time = time.time()
         self.count_times = [0]
  
-
     def is_trivial_and_count_old(self, test):
         total_counts = 2 ** test.size
         self.count_times.append(time.time() - self.start_time)
@@ -429,7 +374,7 @@ class Counter:
         for parent in test.parents:
             Counter._add_counts(parent._data,test._data)
             Counter._add_counts(parent._counts,test._data)
-            queue.extend(test.parents)
+        queue.extend(test.parents)
 
         while queue:
             test = queue.popleft()
@@ -441,7 +386,7 @@ class Counter:
             for parent in test.parents:
                 Counter._add_counts(parent._data,test._data)
                 Counter._add_counts(parent._counts,test._data)
-                queue.extend(test.parents)
+            queue.extend(test.parents)
 
         count = test._data # this is the count on the root node
 
@@ -471,13 +416,13 @@ class Counter:
             weighted_sum = sum(w * x for w, x in zip(weights, c))
             if weighted_sum >= threshold:
                 count += 1
-                
+        
         # Update internal counters
         
         if key:
             self.seen[key] = count
         return count
-    
+ 
 
 # Function used to create the pruned tree using a depth-first search algorithm
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
@@ -492,11 +437,6 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     else:
         node_color = 'black'
 
-        #plot.add_node(current_id, current_label, color = node_color)
-
-    #if parent_id is not None:
-    #plot.add_edge(parent_id, current_id, label=f"x_{test.size + 1}")
-
     if counter.is_trivial_and_count_old(test):
         return
 
@@ -505,8 +445,6 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
         # Recursion, adds upon the depth of the tree
         reduced_test = test.set_last_input(next_value)
         form_tree(plot, reduced_test,parent_id=current_id, depth=depth+1, counter=counter)
-        
-    #plot.draw_tree("tree_plot.png")
 
 # Improved form_tree function using a best-first search algorithm
 # with the use of heaps
@@ -528,7 +466,7 @@ def model_count(test, depth, cache = {}):
         low_count = model_count(low_test, depth+1, cache)
 
         count = high_count + low_count
-        cache[key] = count
+    cache[key] = count
     return count
 
 def compute_priority_A(test):
@@ -583,11 +521,7 @@ def bfs_form_tree(test, counter=None):
                 right_priority = compute_priority_A(right)
                 heapq.heappush(heap, (left_priority, depth+1,left, test,0))
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
-
-                #print(counter.count_passing_inputs(test))
-                # ^^Function continues until heap is empty^^     
         # ^^Function continues until heap is empty^^     
-
 
 def old_bfs(test, counter=None):
     heap = []
@@ -684,7 +618,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     
     # Final count of the lists
     count = pass_list[-1]
-    
+   
     plt.plot(pass_list,color='blue',linestyle='-')
     plt.plot(fail_list,color='red', linestyle='-')
     plt.plot(pruned_fail,color='red' , linestyle= '-')
@@ -722,23 +656,6 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     
     # Final count of the lists
     count = pruned_pass[-1]
-
-    
-    plt.plot(pruned_fail,color='red' , linestyle= '-')
-    plt.plot(pruned_pass,color='blue' , linestyle= '-')
-    plt.plot(bfs_pass, color='magenta', linestyle='-')
-    plt.plot(bfs_fail,color='purple', linestyle='-') 
-    plt.plot(old_bfs_pass, color="green", linestyle='-')
-    plt.plot(old_bfs_fail, color='lime', linestyle='-')
-    plt.axhline(y=count, linestyle='--', color="black")
-    plt.xscale("log")
-
-    #print(F"BFS OLD: {old_bfs_pass}")
-    #print(f"BFS NEW: {bfs_pass}")
-    plt.show()
-    #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-    # For the graph there are (2 * x) - 2 nodes
-
    
     x = list(range(1,len(pruned_fail)+1))
     #plt.plot(x,pruned_fail,color='red' , linestyle= ':')
@@ -758,23 +675,13 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     plt.show()
 
 
-
 # For the graph there are (2 * x) - 2 nodes
 n = 20
 weights = [1]*n
-
-weights = sorted(weights,key=lambda x: abs(x))
-threshold = 5
-
 #weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 weights = sorted(weights,key=lambda x: abs(x))
 threshold = 10
-
 threshold_test = ThresholdTest(weights, threshold)
-
-filename = "data/digits/neuron/digits-0-1.neuron"
-threshold_test = ThresholdTest.read(filename)
-
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
 
@@ -797,8 +704,7 @@ with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
-plotter.draw_tree(threshold_test, filename="threshold_tree.png")
-plotter.draw_graph(threshold_test, filename="threshold_graph.png")
+#plotter.draw_tree(threshold_test, filename="tree_plot.png")
 #print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
 print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
 print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
@@ -808,7 +714,6 @@ print(f"tree node count (internal): {threshold_test.tree_node_count(only_interna
 print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-#pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
 pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter=bfs_counter)
 
 
