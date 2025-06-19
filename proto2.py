@@ -2,6 +2,7 @@ import itertools
 import heapq
 from timer import Timer
 import math
+import time
 #import sys
 #sys.setrecursionlimit(2048)
 
@@ -355,9 +356,15 @@ class Counter:
         self.fail_counts = [0]
         self.count = 0
         self.seen = {}
+
         
+        self.start_time = time.time()
+        self.count_times = [0]
+ 
+
     def is_trivial_and_count_old(self, test):
         total_counts = 2 ** test.size
+        self.count_times.append(time.time() - self.start_time)
         if test.is_trivial_pass():
             self.passes += total_counts
             self.pass_counts.append(self.passes)
@@ -367,11 +374,13 @@ class Counter:
             self.fails += total_counts
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
+
             return True
         return False
 
     def is_trivial_and_count(self, test):
         total_counts = 2 ** test.size
+        self.count_times.append(time.time() - self.start_time)
         if test.is_trivial_pass():
             root_counts = self._propagate_count(test,[total_counts,0])
             self.passes += root_counts[0]
@@ -391,12 +400,13 @@ class Counter:
         if counts[0] + counts[1] == 0:
             # nothing to update
             return
+        self.count_times.append(time.time() - self.start_time)
         root_counts = self._propagate_count(parent_test,counts)
         self.passes += root_counts[0]
         self.fails += root_counts[1]
         self.pass_counts.append(self.passes)
         self.fail_counts.append(self.fails)
-
+    
     @classmethod
     def _add_counts(cls,a,b):
         a[0] += b[0]
@@ -473,11 +483,7 @@ class Counter:
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     
     # Displaying important values onto the nodes (mainly steps to pass and fail)
-    #pass_steps, fail_steps = steps_to_pass(test), steps_to_fail(test)
 
-    #bounds = Bounds(test.weights)
-    #count = 2 ** test.size
-    #current_label = f"{test}\n{bounds.gap_size(test)}\n{pass_steps}\n{fail_steps}\nCount: {count}"
     current_id = f"Node_{depth}_{test.id}"
     if test.is_trivial_pass():
         node_color = 'green'
@@ -485,6 +491,7 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
         node_color = 'red'
     else:
         node_color = 'black'
+
         #plot.add_node(current_id, current_label, color = node_color)
 
     #if parent_id is not None:
@@ -527,8 +534,6 @@ def model_count(test, depth, cache = {}):
 def compute_priority_A(test):
     return min(steps_to_pass(test), steps_to_fail(test))
 
-def compute_priority_R(test):
-    return steps_to_pass(test)
 
 def bfs_form_tree(test, counter=None):
     # Initializing an empty heap array we will be iterating upon:
@@ -536,14 +541,9 @@ def bfs_form_tree(test, counter=None):
     # after pop, key is created which is the depth, then the threshold, (depth, threshold) , the value of the key is the threshold test
     # check key, if not there then add to cache, if there then do not check or add, just add edge (if plot search space)
     seen = {}
-
     # Creating and "pushing" our priorities to the heap
-    iteration = 0
 
-    def compute_priority(test):
-        return min(steps_to_pass(test), steps_to_fail(test))
-
-    initial_priority = compute_priority(test)
+    initial_priority = compute_priority_A(test)
     heapq.heappush(heap, (initial_priority, 0, test, None, None))
 
     # "while" The heap has values within itself
@@ -579,32 +579,39 @@ def bfs_form_tree(test, counter=None):
                 # add children to priority queue
                 left = test.set_last_input(0)
                 right = test.set_last_input(1)
-                left_priority = compute_priority(left)
-                right_priority = compute_priority(right)
+                left_priority = compute_priority_A(left)
+                right_priority = compute_priority_A(right)
                 heapq.heappush(heap, (left_priority, depth+1,left, test,0))
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
+
                 #print(counter.count_passing_inputs(test))
                 # ^^Function continues until heap is empty^^     
+        # ^^Function continues until heap is empty^^     
+
 
 def old_bfs(test, counter=None):
     heap = []
-    depth = 0
+    
     p = steps_to_pass(test)
     f = steps_to_fail(test)
 
-    heapq.heappush(heap,(p,f, depth, test, None, None))
+    heapq.heappush(heap,(p,f, 0, test, None, None))
 
     while heap:
-        p, f, depth, test, parent_id, edge_label = heapq.heappop(heap)
-
+        p, f, depth, test, parent_test, edge_label = heapq.heappop(heap)
+        
+        if parent_test is not None:
+            if edge_label == 0: parent_test.lo = test
+            else:               parent_test.hi = test
+            test.parents.append(parent_test)
         if counter.is_trivial_and_count_old(test):
-            pass
+            continue
         else:
             left = test.set_last_input(0)
             right = test.set_last_input(1)
 
 
-            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), depth+1, left, test, 0))
+            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), depth + 1, left, test, 0))
             heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), depth + 1, right, test, 1))
 
 # Iterates throught the amount of steps a node is away from becoming trivial
@@ -690,7 +697,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
 
     plt.show()
-def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test):
+def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter = None):
     import matplotlib
     from matplotlib import pyplot as plt
 
@@ -715,6 +722,7 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     
     # Final count of the lists
     count = pruned_pass[-1]
+
     
     plt.plot(pruned_fail,color='red' , linestyle= '-')
     plt.plot(pruned_pass,color='blue' , linestyle= '-')
@@ -731,11 +739,37 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
     # For the graph there are (2 * x) - 2 nodes
 
-n = 10
-#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+   
+    x = list(range(1,len(pruned_fail)+1))
+    #plt.plot(x,pruned_fail,color='red' , linestyle= ':')
+    #plt.plot(x,pruned_pass,color='blue' , linestyle= ':')
+    x = list(range(1,len(bfs_pass)+1))
+    c = counter.count_times[:len(bfs_pass)]
+    plt.plot(c,bfs_pass, color='blue', linestyle='-', marker = "x")
+    plt.plot(c,bfs_fail,color='red', linestyle='-', marker ="x")
+    #x = list(range(1,len(old_bfs_pass)+1))
+    #plt.plot(x,old_bfs_pass, color="blue", linestyle='-.', marker = "o")
+    #plt.plot(x,old_bfs_fail, color='red', linestyle='-.', marker = "o")
+    plt.axhline(y=count, linestyle='--', color="black")
+    plt.xscale("log")
+    plt.savefig("plot-log.png")
+    plt.xscale("linear")
+    plt.savefig("plot-linear.png")
+    plt.show()
+
+
+
+# For the graph there are (2 * x) - 2 nodes
+n = 20
 weights = [1]*n
+
 weights = sorted(weights,key=lambda x: abs(x))
 threshold = 5
+
+#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+weights = sorted(weights,key=lambda x: abs(x))
+threshold = 10
+
 threshold_test = ThresholdTest(weights, threshold)
 
 filename = "data/digits/neuron/digits-0-1.neuron"
@@ -754,11 +788,11 @@ with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 """
-
 with Timer("old_bfs"):
     old_bfs_counter = Counter(threshold_test.size)
     old_bfs(threshold_test, counter=old_bfs_counter)
     old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
+
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
@@ -767,10 +801,15 @@ plotter.draw_tree(threshold_test, filename="threshold_tree.png")
 plotter.draw_graph(threshold_test, filename="threshold_graph.png")
 #print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
 print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
-print(f"formula:                     {threshold*n-((threshold-1)*threshold)}")
-print(f"formula 2:                   {math.comb(n+1, threshold) - 1}")
+print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
+print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
 #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
 print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
 print(f"model count: {threshold_test.model_count()}")
+
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
 #pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
+pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter=bfs_counter)
+
+
+#for a given image- follow the decsion tree until trivial
