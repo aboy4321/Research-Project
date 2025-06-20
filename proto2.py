@@ -697,7 +697,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
 
     plt.show()
-def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter = None):
+def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter_pruned=None, counter_bfs=None, counter_old=None):
     import matplotlib
     from matplotlib import pyplot as plt
 
@@ -722,34 +722,16 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     
     # Final count of the lists
     count = pruned_pass[-1]
-
     
-    plt.plot(pruned_fail,color='red' , linestyle= '-')
-    plt.plot(pruned_pass,color='blue' , linestyle= '-')
-    plt.plot(bfs_pass, color='magenta', linestyle='-')
-    plt.plot(bfs_fail,color='purple', linestyle='-') 
-    plt.plot(old_bfs_pass, color="green", linestyle='-')
-    plt.plot(old_bfs_fail, color='lime', linestyle='-')
-    plt.axhline(y=count, linestyle='--', color="black")
-    plt.xscale("log")
-
-    #print(F"BFS OLD: {old_bfs_pass}")
-    #print(f"BFS NEW: {bfs_pass}")
-    plt.show()
-    #weights = [1024,-1024,512,-512,256,-256,128,-128,64,-64,32,-32,16,-16,8,-8,4,-4,2,-2,1,-1]
-    # For the graph there are (2 * x) - 2 nodes
-
-   
-    x = list(range(1,len(pruned_fail)+1))
-    #plt.plot(x,pruned_fail,color='red' , linestyle= ':')
-    #plt.plot(x,pruned_pass,color='blue' , linestyle= ':')
-    x = list(range(1,len(bfs_pass)+1))
-    c = counter.count_times[:len(bfs_pass)]
-    plt.plot(c,bfs_pass, color='blue', linestyle='-', marker = "x")
-    plt.plot(c,bfs_fail,color='red', linestyle='-', marker ="x")
-    #x = list(range(1,len(old_bfs_pass)+1))
-    #plt.plot(x,old_bfs_pass, color="blue", linestyle='-.', marker = "o")
-    #plt.plot(x,old_bfs_fail, color='red', linestyle='-.', marker = "o")
+    pruned_counter = counter.count_times[:len(pruned_pass)]
+    plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
+    plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
+    bfs_counter = counter.count_times[:len(bfs_pass)]
+    plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
+    plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
+    oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
+    plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
+    plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
     plt.axhline(y=count, linestyle='--', color="black")
     plt.xscale("log")
     plt.savefig("plot-log.png")
@@ -757,22 +739,15 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     plt.savefig("plot-linear.png")
     plt.show()
 
-
-
 # For the graph there are (2 * x) - 2 nodes
-n = 20
-weights = [1]*n
-
-weights = sorted(weights,key=lambda x: abs(x))
-threshold = 5
-
+#n = 20
+#weights = [1]*n
+#weights = sorted(weights,key=lambda x: abs(x))
 #weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
-weights = sorted(weights,key=lambda x: abs(x))
-threshold = 10
+#threshold = 10
 
-threshold_test = ThresholdTest(weights, threshold)
-
-filename = "data/digits/neuron/digits-0-1.neuron"
+#threshold_test = ThresholdTest(weights, threshold)
+filename = "/home/aidanboyce/work/projects/Research-Project/data/digits/neuron-0-1.neuron"
 threshold_test = ThresholdTest.read(filename)
 
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
@@ -801,15 +776,11 @@ plotter.draw_tree(threshold_test, filename="threshold_tree.png")
 plotter.draw_graph(threshold_test, filename="threshold_graph.png")
 #print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
 print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
-print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
-print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
+#print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
+#print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
 #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
 print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
 print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-#pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test)
-pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter=bfs_counter)
-
-
-#for a given image- follow the decsion tree until trivial
+pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
