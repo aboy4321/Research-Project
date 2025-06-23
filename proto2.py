@@ -7,7 +7,7 @@ import time
 #sys.setrecursionlimit(2048)
 
 
-PLOT_SEARCH_SPACE = False
+PLOT_SEARCH_SPACE = True
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -212,6 +212,21 @@ class ThresholdTest:
 
         cache[self.id] = count
         return count
+       
+    def classify(self, pair=(0, 1)):
+        current = self
+        path = []
+        while True:
+            if current.is_trivial_pass():
+                return pair[0], path
+            if current.is_trivial_fail():
+                return pair[1], path
+            
+            var_idx = current.size  # Current variable being decided
+            weight = current.get_last_weight()
+            val = 1 if current.get_last_weight() > 0 else 0
+            path.append((var_idx, weight,val))
+            current = current.set_last_input(val) 
 # Class used to measure the upper and lower bounds of the threshold test    
 class Bounds():
     def __init__(self, lb, ub):
@@ -355,13 +370,10 @@ class Counter:
         self.pass_counts = [0]
         self.fail_counts = [0]
         self.count = 0
-        self.seen = {}
-
-        
+        self.seen = {}       
         self.start_time = time.time()
         self.count_times = [0]
  
-
     def is_trivial_and_count_old(self, test):
         total_counts = 2 ** test.size
         self.count_times.append(time.time() - self.start_time)
@@ -478,7 +490,6 @@ class Counter:
             self.seen[key] = count
         return count
     
-
 # Function used to create the pruned tree using a depth-first search algorithm
 def form_tree(plot, test, parent_id=None, depth=0, counter=None):
     
@@ -533,7 +544,6 @@ def model_count(test, depth, cache = {}):
 
 def compute_priority_A(test):
     return min(steps_to_pass(test), steps_to_fail(test))
-
 
 def bfs_form_tree(test, counter=None):
     # Initializing an empty heap array we will be iterating upon:
@@ -721,17 +731,17 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     # Makes sure pass_list and flipped fail_list meet at the same endpoint
     
     # Final count of the lists
-    count = pruned_pass[-1]
-    
-    pruned_counter = counter.count_times[:len(pruned_pass)]
-    plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
-    plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
+    #count = pruned_pass[-1]
+    count = bfs_pass[-1]
+    #pruned_counter = counter.count_times[:len(pruned_pass)]
+    #plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
+    #plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
     bfs_counter = counter.count_times[:len(bfs_pass)]
     plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
     plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
-    oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
-    plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
-    plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
+    #oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
+    #plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
+    #plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
     plt.axhline(y=count, linestyle='--', color="black")
     plt.xscale("log")
     plt.savefig("plot-log.png")
@@ -739,41 +749,81 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     plt.savefig("plot-linear.png")
     plt.show()
 
+def bfs_graph(bfs_pass, bfs_fail, test, counter):
+    import matplotlib
+    from matplotlib import pyplot as plt
+
+    font_size = 20
+
+    matplotlib.rcParams.update({'xtick.labelsize': font_size,
+                                'ytick.labelsize': font_size,
+                                'figure.autolayout': True})
+    font = {'family': 'sans-serif',
+            'weight': 'normal',
+            'size': 15}
+    matplotlib.rc('font', **font)
+    # computing the top value (this is 2^n)
+    total = 2 ** test.size
+    
+    # Flipping the fail_list to start at the top and count down
+    bfs_fail = [total - fail for fail  in bfs_fail]
+    
+    # Makes sure pass_list and flipped fail_list meet at the same endpoint
+    
+    # Final count of the lists
+    count = bfs_pass[-1]
+    bfs_counter = counter.count_times[:len(bfs_pass)]
+    plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
+    plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
+    plt.axhline(y=count, linestyle='--', color="black")
+    plt.xscale("log")
+    plt.savefig("plot-log.png")
+    plt.xscale("linear")
+    plt.savefig("plot-linear.png")
+    plt.show()
 # For the graph there are (2 * x) - 2 nodes
-#n = 20
-#weights = [1]*n
-#weights = sorted(weights,key=lambda x: abs(x))
+n = 10
+weights = [1]*n
+weights = sorted(weights,key=lambda x: abs(x))
 #weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
-#threshold = 10
+threshold = 5
+
 
 #threshold_test = ThresholdTest(weights, threshold)
-filename = "/home/aidanboyce/work/projects/Research-Project/data/digits/neuron-0-1.neuron"
+i, j = 0, 1
+filename = f"/home/aidanboyce/work/projects/Research-Project/data/digits/neuron-{i}-{j}.neuron"
 threshold_test = ThresholdTest.read(filename)
-
+pair = (i, j)
+print(threshold_test.weights)
+true_digit = threshold_test.classify(pair = pair)
+print("the digit is classified as: ", true_digit) 
+# Print the decision path
+#threshold_test.print_auto_path()
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
-
+"""
 with Timer("dfs"):
     counter = Counter(threshold_test.size)
     form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
 
-"""
+
 with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-"""
+
 with Timer("old_bfs"):
     old_bfs_counter = Counter(threshold_test.size)
     old_bfs(threshold_test, counter=old_bfs_counter)
     old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
-
+"""
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
     bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
-plotter.draw_tree(threshold_test, filename="threshold_tree.png")
-plotter.draw_graph(threshold_test, filename="threshold_graph.png")
+
+#plotter.draw_tree(threshold_test, filename="threshold_tree.png")
+#plotter.draw_graph(threshold_test, filename="threshold_graph.png")
 #print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
 print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
 #print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
@@ -783,4 +833,5 @@ print(f"tree node count (internal): {threshold_test.tree_node_count(only_interna
 print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
+#pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
+bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)

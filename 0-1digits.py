@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
 from sklearn.tree import DecisionTreeClassifier
@@ -70,5 +69,7 @@ def generate_neuron():
             # count the number of non-zero weights
             non_zero_count = sum(1 for a in w if a != 0)
             print("# of non-zero weights: %d" % non_zero_count)
-generate_neuron()
+
+if __name__ == "__main__":
+    generate_neuron()
 

@@ -8,3 +8,5 @@ __pycache__/
 .vscode
 *.neuron
 *.txt
+plotting.py
+threshold_test.py
