@@ -3,6 +3,9 @@ import heapq
 from timer import Timer
 import math
 import time
+import numpy as np
+from matplotlib import pyplot as plt
+import pylab
 #import sys
 #sys.setrecursionlimit(2048)
 
@@ -11,9 +14,10 @@ PLOT_SEARCH_SPACE = True
 
 class ThresholdTest:
     id_counter = 0 # next available id
-    def __init__(self, weights, threshold, size=None, bounds=None):
+    def __init__(self, weights, threshold, indices=None, size=None, bounds=None):
         #establishing variables
         self.weights = weights
+        self.indices = indices 
         self.threshold = threshold
 
         # instead of copying weights over and over again,
@@ -37,7 +41,6 @@ class ThresholdTest:
 
         # unique id
         self.id = ThresholdTest.new_id()
-
     @classmethod
     def new_id(cls):
         new_id = cls.id_counter
@@ -79,10 +82,10 @@ class ThresholdTest:
         assert "weights" in neuron
 
         weights = list(map(int,neuron["weights"].split()))
-        weights = sorted(weights,key=lambda x: abs(x))
+        indices, weights = ThresholdTest.sort_weights(weights)
         threshold = int(neuron["threshold"])
 
-        return ThresholdTest(weights,threshold)
+        return ThresholdTest(weights,threshold, indices=indices)
 
     @staticmethod
     def read(filename):
@@ -90,7 +93,6 @@ class ThresholdTest:
         with open(filename,'r') as f:
             st = f.read()
         return ThresholdTest.parse(st)
-
     def get_weights(self):
         # try not to use this function
         return self.weights[:self.size]
@@ -99,7 +101,12 @@ class ThresholdTest:
         # note that weights may be longer than size
         # (this is to avoid re-copying the weights in set_last_input()
         return self.weights[self.size-1]
-
+    @classmethod
+    def sort_weights(cls, weights):
+        weights = list(enumerate(weights))
+        weights = sorted(weights,key=lambda x: abs(x[1]))
+        indices,weights = zip(*weights)
+        return indices, weights
     # Functions testing for triviality:
     def is_trivial_fail(self):
         lower,upper = self.bounds.get_bounds()
@@ -122,8 +129,6 @@ class ThresholdTest:
 
         all_combinations = list(itertools.product([0, 1], repeat=self.size))
         headers = [f"X_{i + 1}" for i in (range(self.size))]
-        #print("|".join(headers) + "|Result")
-
         weights = self.get_weights()
 
         #iterating through all possible combinations
@@ -167,7 +172,7 @@ class ThresholdTest:
             lb -= last_weight
         bounds = Bounds(lb,ub)
 
-        return ThresholdTest(self.weights, new_threshold, size=self.size-1, bounds=bounds)
+        return ThresholdTest(self.weights, new_threshold, indices=self.indices ,size=self.size-1, bounds=bounds)
 
     def _all_nodes(self,cache=None,only_internal=False):
         # returns a set containing all nodes induced by a threshold test
@@ -219,7 +224,7 @@ class ThresholdTest:
         cache[self.id] = count
         return count
        
-    def classify(self, pair=(0, 1)):
+    def classify(self, pair=(0, 1), plot=True):
         current = self
         path = []
         while True:
@@ -233,6 +238,7 @@ class ThresholdTest:
             val = 1 if current.get_last_weight() > 0 else 0
             path.append((var_idx, weight,val))
             current = current.set_last_input(val) 
+
 # Class used to measure the upper and lower bounds of the threshold test    
 class Bounds():
     def __init__(self, lb, ub):
@@ -264,32 +270,6 @@ class Bounds():
 
         score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
         return score_list
-
-# Functions previously used to display the computations the threshold test was making
-def print_path(test, values, depth=0):
-
-    print("  " * depth + str(test))
-    if not values:
-        return
-
-    next_value = values[-1]
-    print("  " * depth + f"└-[x_{test.size}={next_value}]- ", end="")
-
-    reduced_test = test.set_last_input(next_value)
-    print_path(reduced_test, values[:-1], depth + 1)
-    # ideally recursive
-
-def print_tree(test, depth=0):
-    print("  " * depth + str(test))
-    if test.size == 0:
-        return
-
-    next_value = 0
-    reduced_test = test.set_last_input(next_value)
-    print_tree(reduced_test, depth + 1)
-    next_value = 1
-    reduced_test = test.set_last_input(next_value)
-    print_tree(reduced_test, depth + 1)
 
 class NullPlotter:
     def __init__(self): pass
@@ -522,8 +502,6 @@ def form_tree(plot, test, parent_id=None, depth=0, counter=None):
         # Recursion, adds upon the depth of the tree
         reduced_test = test.set_last_input(next_value)
         form_tree(plot, reduced_test,parent_id=current_id, depth=depth+1, counter=counter)
-        
-    #plot.draw_tree("tree_plot.png")
 
 # Improved form_tree function using a best-first search algorithm
 # with the use of heaps
@@ -600,7 +578,6 @@ def bfs_form_tree(test, counter=None):
                 heapq.heappush(heap, (left_priority, depth+1,left, test,0))
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
 
-                #print(counter.count_passing_inputs(test))
                 # ^^Function continues until heap is empty^^     
         # ^^Function continues until heap is empty^^     
 
@@ -710,8 +687,6 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
     plt.axhline(y=count, linestyle='--', color="black")
 
     plt.xscale('log')
-
-
     plt.show()
 def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter_pruned=None, counter_bfs=None, counter_old=None):
     import matplotlib
@@ -737,17 +712,16 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     # Makes sure pass_list and flipped fail_list meet at the same endpoint
     
     # Final count of the lists
-    #count = pruned_pass[-1]
     count = bfs_pass[-1]
-    #pruned_counter = counter.count_times[:len(pruned_pass)]
-    #plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
-    #plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
+    pruned_counter = counter.count_times[:len(pruned_pass)]
+    plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
+    plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
     bfs_counter = counter.count_times[:len(bfs_pass)]
     plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
     plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
-    #oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
-    #plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
-    #plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
+    oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
+    plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
+    plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
     plt.axhline(y=count, linestyle='--', color="black")
     plt.xscale("log")
     plt.savefig("plot-log.png")
@@ -787,24 +761,59 @@ def bfs_graph(bfs_pass, bfs_fail, test, counter):
     plt.xscale("linear")
     plt.savefig("plot-linear.png")
     plt.show()
+
+def visualize_neuron(train_data, test):
+    image_data = np.loadtxt(train_data, delimiter=",")
+    image = image_data[0, 1:]
+
+    # initializing array
+    image_2d = image.reshape(28, 28)
+
+    path_pixels = []
+    path_bits = []
+    while not (test.is_trivial_pass() or test.is_trivial_fail()):
+        pixel_idx = test.indices[test.size-1]
+        path_pixels.append(pixel_idx)
+        pixel_value = image[pixel_idx]
+        bit = 1 if pixel_value > 0 else 0
+        path_bits.append(bit)
+        test = test.set_last_input(bit)
+
+    # increasing contrast
+    normalized_image = image_2d / image_2d.max() * 0.3 + 0.3
+
+    # adding dark grey background
+    overlay = np.full((28,28), 0.2)  
+    
+    # layering images over one another
+    overlay[:] = normalized_image
+
+    # getting set_last_input pixel values
+    for pixel_idx, bit in zip(path_pixels, path_bits):
+        r, c = divmod(pixel_idx, 28)
+        overlay[r, c] = 1.0 if bit == 0 else 0.0  
+
+    # plotting
+    plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
+    plt.axis('off')
+    plt.show()
+
+ 
 # For the graph there are (2 * x) - 2 nodes
+"""
 n = 10
-weights = [1]*n
 weights = sorted(weights,key=lambda x: abs(x))
-#weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 threshold = 5
+threshold_test = ThresholdTest(weights, threshold)
+"""
+i, j = 3, 5
 
-
-#threshold_test = ThresholdTest(weights, threshold)
-i, j = 0, 1
 filename = f"data/digits/neuron-{i}-{j}.neuron"
 threshold_test = ThresholdTest.read(filename)
 pair = (i, j)
-print(threshold_test.weights)
 true_digit = threshold_test.classify(pair = pair)
-print("the digit is classified as: ", true_digit) 
 # Print the decision path
-#threshold_test.print_auto_path()
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
 """
@@ -831,13 +840,16 @@ with Timer("bfs"):
 #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
 #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
 #print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
-print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
+#print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
 #print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
 #print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
 #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
-print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
-print(f"model count: {threshold_test.model_count()}")
+#print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
+#print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
 #pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
 bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
+image = f"data/csv/train-{i}-{j}.txt"
+visualize_neuron(image, threshold_test)
+
