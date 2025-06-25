@@ -56,7 +56,13 @@ class ThresholdTest:
         weights = self.get_weights()
         if not weights:
             return f"0 &#8805; {self.threshold}"
-        root = " + ".join([f"{weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
+        #root = " + ".join([f"{weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>" for var, weight in enumerate(weights)])
+        root = f"{weights[0]}&#xb7;<I>X</I><SUB>{1}</SUB>"
+        for var,weight in enumerate(weights[1:],1):
+            if weight > 0:
+                root += f" + {weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>"
+            else:
+                root += f" - {-weight}&#xb7;<I>X</I><SUB>{var+1}</SUB>"
         root = f"{root} &#8805; {self.threshold}"
         return root
 
@@ -290,7 +296,7 @@ class TreePlotter():
 
     # Function to add edges to the nodes, from parent to child
     def add_edge(self, test, parent_id, child_id, value):
-        style = "solid" if value == "1" else "dashed"
+        style = "solid" if value == 1 else "dashed"
         label = f"<I>X</I><SUB>{test.size + 1}</SUB> = {value}"
         self.graph.add_edge(parent_id, child_id, label=f"<{label}>", style=style)
 
@@ -802,6 +808,7 @@ threshold = 5
 threshold_test = ThresholdTest(weights, threshold)
 """
 i, j = 3, 5
+
 filename = f"data/digits/neuron-{i}-{j}.neuron"
 threshold_test = ThresholdTest.read(filename)
 pair = (i, j)
@@ -845,3 +852,4 @@ with Timer("bfs"):
 bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 image = f"data/csv/train-{i}-{j}.txt"
 visualize_neuron(image, threshold_test)
+
