@@ -223,17 +223,19 @@ class ThresholdTest:
 
         cache[self.id] = count
         return count
-       
-    def classify(self, pair=(0, 1), plot=True):
+    def get_last_idx(self, image):
+        pass
+    def classify(self, image, pair=(0, 1)):
         current = self
         path = []
+        image = image.reshape(28, 28)
         while True:
             if current.is_trivial_pass():
                 return pair[0], path
             if current.is_trivial_fail():
                 return pair[1], path
             
-            var_idx = current.size  # Current variable being decided
+            var_idx = current.size  
             weight = current.get_last_weight()
             val = 1 if current.get_last_weight() > 0 else 0
             path.append((var_idx, weight,val))
@@ -532,11 +534,8 @@ def compute_priority_A(test):
 def bfs_form_tree(test, counter=None):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
-    # after pop, key is created which is the depth, then the threshold, (depth, threshold) , the value of the key is the threshold test
-    # check key, if not there then add to cache, if there then do not check or add, just add edge (if plot search space)
     seen = {}
     # Creating and "pushing" our priorities to the heap
-
     initial_priority = compute_priority_A(test)
     heapq.heappush(heap, (initial_priority, 0, test, None, None))
 
@@ -579,8 +578,38 @@ def bfs_form_tree(test, counter=None):
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
 
                 # ^^Function continues until heap is empty^^     
-        # ^^Function continues until heap is empty^^     
+def robust(test, image, label):
+    heap = [(0, test, image, [])]
+    while heap:
+        cost, test, current_image, path = heapq.heappop(heap)
+        if label == True:
+            if test.is_trivial_fail():
+                return path
+            
+            if test.is_trivial_pass():
+                continue
+        else:
+            if test.is_trivial_fail():
+                continue
+            
+            if test.is_trivial_pass():
+                return path
+        pixel_idx = test.indices[test.size - 1]
 
+        value = int(current_image[pixel_idx])
+
+        for next_value in [0,1]:
+            if next_value == value:
+                flip_cost = 0
+            else:
+                flip_cost = 1
+            new_image = current_image.copy()
+
+            new_image[pixel_idx] = next_value
+            new_test = test.set_last_input(next_value)
+
+            new_path = path + [(pixel_idx, value, next_value)] 
+            heapq.heappush(heap, (cost+flip_cost, new_test, new_image, new_path))
 
 def old_bfs(test, counter=None):
     heap = []
@@ -607,7 +636,7 @@ def old_bfs(test, counter=None):
             heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), depth + 1, left, test, 0))
             heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), depth + 1, right, test, 1))
 
-# Iterates throught the amount of steps a node is away from becoming trivial
+# Iterates through the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
 def steps_to_pass(test):
     weights = test.weights
@@ -688,6 +717,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
     plt.xscale('log')
     plt.show()
+
 def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter_pruned=None, counter_bfs=None, counter_old=None):
     import matplotlib
     from matplotlib import pyplot as plt
@@ -709,17 +739,15 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     bfs_fail = [total - fail for fail  in bfs_fail]
     old_bfs_fail = [total - fail for fail in old_bfs_fail]
     
-    # Makes sure pass_list and flipped fail_list meet at the same endpoint
-    
     # Final count of the lists
-    count = bfs_pass[-1]
-    pruned_counter = counter.count_times[:len(pruned_pass)]
+    count = bfs_fail[-1]
+    pruned_counter = counter_pruned.count_times[:len(pruned_pass)]
     plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
     plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
-    bfs_counter = counter.count_times[:len(bfs_pass)]
+    bfs_counter = counter_bfs.count_times[:len(bfs_pass)]
     plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
     plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
-    oldbfs_counter = counter.count_times[:len(old_bfs_pass)]
+    oldbfs_counter = counter_old.count_times[:len(old_bfs_pass)]
     plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
     plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
     plt.axhline(y=count, linestyle='--', color="black")
@@ -762,10 +790,7 @@ def bfs_graph(bfs_pass, bfs_fail, test, counter):
     plt.savefig("plot-linear.png")
     plt.show()
 
-def visualize_neuron(train_data, test):
-    image_data = np.loadtxt(train_data, delimiter=",")
-    image = image_data[0, 1:]
-
+def visualize_neuron(image, test):
     # initializing array
     image_2d = image.reshape(28, 28)
 
@@ -791,14 +816,31 @@ def visualize_neuron(train_data, test):
     # getting set_last_input pixel values
     for pixel_idx, bit in zip(path_pixels, path_bits):
         r, c = divmod(pixel_idx, 28)
-        overlay[r, c] = 1.0 if bit == 0 else 0.0  
+        overlay[r, c] = 1.0 if bit == 1 else 0.0  
 
     # plotting
     plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
-    plt.axis('off')
-    plt.show()
+    #plt.show()
+    if test.is_trivial_pass():
+        return True
+    if test.is_trivial_fail():
+        return False
+def visualize_counterfactual(image, path):
 
- 
+    normalized = image / image.max() * 0.3 + 0.3
+    overlay = normalized.reshape(28, 28).copy()
+
+    for pixel_idx, original_val, flipped_val in path:
+        r, c = divmod(pixel_idx, 28)
+        if original_val == flipped_val:
+            continue
+        if flipped_val == 1:
+            overlay[r, c] = 1.0  # white
+        else:
+            overlay[r, c] = 0.0  # black
+
+    plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
+    #plt.show()
 # For the graph there are (2 * x) - 2 nodes
 """
 n = 10
@@ -807,31 +849,28 @@ weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
 threshold = 5
 threshold_test = ThresholdTest(weights, threshold)
 """
-i, j = 3, 5
+i, j = 0, 1 
 
 filename = f"data/digits/neuron-{i}-{j}.neuron"
 threshold_test = ThresholdTest.read(filename)
 pair = (i, j)
-true_digit = threshold_test.classify(pair = pair)
+#true_digit = threshold_test.classify(pair = pair)
 # Print the decision path
 if PLOT_SEARCH_SPACE: plotter = TreePlotter()
 else:                 plotter = NullPlotter()
-"""
 with Timer("dfs"):
     counter = Counter(threshold_test.size)
     form_tree(plotter, threshold_test, counter=counter)
     pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
-
-
+"""
 with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-
+"""
 with Timer("old_bfs"):
     old_bfs_counter = Counter(threshold_test.size)
     old_bfs(threshold_test, counter=old_bfs_counter)
     old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
-"""
 with Timer("bfs"):
     bfs_counter = Counter(threshold_test.size)
     bfs_form_tree(threshold_test, counter=bfs_counter)
@@ -848,8 +887,25 @@ with Timer("bfs"):
 #print(f"model count: {threshold_test.model_count()}")
 
 #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-#pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
+pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
 bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
-image = f"data/csv/train-{i}-{j}.txt"
-visualize_neuron(image, threshold_test)
+image_file= f"data/csv/train-{i}-{j}.txt"
+image_data = np.loadtxt(image_file, delimiter=",")
 
+#file:///home/aidanboyce/work/projects/Research-Project/index.html
+output_dir = "output"
+f = open(f"index.html",'w')
+for image_index in range(20):
+    image = image_data[image_index, :-1]
+    label = visualize_neuron(image, threshold_test)
+    print(f"{label} neuron: {image_index}")
+    neuron_filename = f"{output_dir}/neuron-{image_index}.png"
+    plt.savefig(neuron_filename)
+    path = robust(threshold_test,image, label)
+    visualize_counterfactual(image, path)
+    counter_filename = f"{output_dir}/counter-{image_index}.png"
+    plt.savefig(counter_filename)
+    f.write(f'label: {pair[int(label)]}')
+    f.write(f'<img src="{neuron_filename}">')
+    f.write(f'<img src="{counter_filename}"><br><br>\n')
+f.close()
