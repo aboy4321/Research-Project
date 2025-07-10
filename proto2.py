@@ -531,12 +531,16 @@ def model_count(test, depth, cache = {}):
 def compute_priority_A(test):
     return min(steps_to_pass(test), steps_to_fail(test))
 
-def bfs_form_tree(test, counter=None):
+def compute_priority_R(test): # from Richard's paper
+    return steps_to_pass(test)
+
+def bfs_form_tree(test, counter=None, priority_f=compute_priority_A):
     # Initializing an empty heap array we will be iterating upon:
     heap = []
     seen = {}
     # Creating and "pushing" our priorities to the heap
-    initial_priority = compute_priority_A(test)
+
+    initial_priority = priority_f(test)
     heapq.heappush(heap, (initial_priority, 0, test, None, None))
 
     # "while" The heap has values within itself
@@ -572,8 +576,8 @@ def bfs_form_tree(test, counter=None):
                 # add children to priority queue
                 left = test.set_last_input(0)
                 right = test.set_last_input(1)
-                left_priority = compute_priority_A(left)
-                right_priority = compute_priority_A(right)
+                left_priority = priority_f(left)
+                right_priority = priority_f(right)
                 heapq.heappush(heap, (left_priority, depth+1,left, test,0))
                 heapq.heappush(heap, (right_priority,depth+1,right,test,1))
 
@@ -585,13 +589,13 @@ def robust(test, image, label):
         if label == True:
             if test.is_trivial_fail():
                 return path
-            
+
             if test.is_trivial_pass():
                 continue
         else:
             if test.is_trivial_fail():
                 continue
-            
+
             if test.is_trivial_pass():
                 return path
         pixel_idx = test.indices[test.size - 1]
@@ -611,16 +615,17 @@ def robust(test, image, label):
             new_path = path + [(pixel_idx, value, next_value)] 
             heapq.heappush(heap, (cost+flip_cost, new_test, new_image, new_path))
 
-def old_bfs(test, counter=None):
+def old_bfs(test, counter=None, priority_f=compute_priority_R):
     heap = []
     
-    p = steps_to_pass(test)
-    f = steps_to_fail(test)
+    #p = steps_to_pass(test)
+    #f = steps_to_fail(test)
 
-    heapq.heappush(heap,(p,f, 0, test, None, None))
+    priority = priority_f(test)
+    heapq.heappush(heap,(priority, 0, test, None, None))
 
     while heap:
-        p, f, depth, test, parent_test, edge_label = heapq.heappop(heap)
+        priority, depth, test, parent_test, edge_label = heapq.heappop(heap)
         
         if parent_test is not None:
             if edge_label == 0: parent_test.lo = test
@@ -632,11 +637,12 @@ def old_bfs(test, counter=None):
             left = test.set_last_input(0)
             right = test.set_last_input(1)
 
+            priority = priority_f(left)
+            heapq.heappush(heap, (priority, depth + 1, left, test, 0))
+            priority = priority_f(right)
+            heapq.heappush(heap, (priority, depth + 1, right, test, 1))
 
-            heapq.heappush(heap, (steps_to_pass(left), steps_to_fail(left), depth + 1, left, test, 0))
-            heapq.heappush(heap, (steps_to_pass(right), steps_to_fail(right), depth + 1, right, test, 1))
-
-# Iterates through the amount of steps a node is away from becoming trivial
+# Iterates throught the amount of steps a node is away from becoming trivial
 # using the set_last_input to check
 def steps_to_pass(test):
     weights = test.weights
@@ -717,7 +723,6 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
     plt.xscale('log')
     plt.show()
-
 def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter_pruned=None, counter_bfs=None, counter_old=None):
     import matplotlib
     from matplotlib import pyplot as plt
@@ -757,7 +762,7 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     plt.savefig("plot-linear.png")
     plt.show()
 
-def bfs_graph(bfs_pass, bfs_fail, test, counter):
+def bfs_graph(bfs_pass, bfs_fail, test, counter, plot_times=True):
     import matplotlib
     from matplotlib import pyplot as plt
 
@@ -780,7 +785,10 @@ def bfs_graph(bfs_pass, bfs_fail, test, counter):
     
     # Final count of the lists
     count = bfs_pass[-1]
-    bfs_counter = counter.count_times[:len(bfs_pass)]
+    if plot_times:
+        bfs_counter = counter.count_times[:len(bfs_pass)]
+    else:
+        bfs_counter = list(range(1,len(bfs_pass)+1))
     plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
     plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
     plt.axhline(y=count, linestyle='--', color="black")
@@ -790,7 +798,57 @@ def bfs_graph(bfs_pass, bfs_fail, test, counter):
     plt.savefig("plot-linear.png")
     plt.show()
 
-def visualize_neuron(image, test):
+def plot_start():
+    import matplotlib
+    from matplotlib import pyplot as plt
+
+    font_size = 20
+    matplotlib.rcParams.update({'xtick.labelsize': font_size,
+                                'ytick.labelsize': font_size,
+                                'figure.autolayout': True})
+    font = {'family': 'sans-serif',
+            'weight': 'normal',
+            'size': 15}
+    matplotlib.rc('font', **font)
+    matplotlib.rcParams.update({'pdf.use14corefonts' : True,
+                                'text.usetex' : True})
+
+def plot_one(counter, plot_times=True, linestyle='-'):
+
+    pass_counts = counter.pass_counts
+    fail_counts = counter.fail_counts
+
+    # computing the top value (this is 2^n)
+    total = 2 ** counter.test_size
+    
+    # Flipping the fail_list to start at the top and count down
+    fail_counts = [total - count for count in fail_counts]
+    
+    # Makes sure pass_list and flipped fail_list meet at the same endpoint
+    
+    # Final count of the lists
+    count = pass_counts[-1]
+    if plot_times:
+        times = counter.count_times[:len(pass_counts)]
+    else:
+        times = list(range(1,len(pass_counts)+1))
+    plt.plot(times,pass_counts, color='blue', linestyle=linestyle)
+    plt.plot(times,fail_counts, color='red', linestyle=linestyle)
+    plt.axhline(y=count, linestyle='--', color="purple")
+
+def plot_end():
+    plt.xlabel('\# of explanations')
+    plt.ylabel('model count')
+
+    plt.xscale("log")
+    plt.savefig("plot-log.png")
+    plt.xscale("linear")
+    plt.savefig("plot-linear.png")
+    plt.savefig("plot-linear.pdf")
+    plt.show()
+
+
+def visualize_neuron(train_data, test):
     # initializing array
     image_2d = image.reshape(28, 28)
 
@@ -838,7 +896,7 @@ def visualize_counterfactual(image, path):
             overlay[r, c] = 1.0  # white
         else:
             overlay[r, c] = 0.0  # black
-
+ 
     plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
     #plt.show()
 # For the graph there are (2 * x) - 2 nodes
@@ -866,6 +924,8 @@ with Timer("dfs"):
 with Timer("truth table"):
     pass_list, fail_list = threshold_test.as_truth_table()
     pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
+    pass_list, fail_list = threshold_test.as_truth_table()
+    pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
 """
 with Timer("old_bfs"):
     old_bfs_counter = Counter(threshold_test.size)
@@ -878,8 +938,6 @@ with Timer("bfs"):
 
 #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
 #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
-#print(f"graph node count (all):      {threshold_test.node_count(only_internal=False)}")
-#print(f"graph node count (internal): {threshold_test.node_count(only_internal=True)}")
 #print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
 #print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
 #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
