@@ -899,14 +899,33 @@ def visualize_counterfactual(image, path):
  
     plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
     #plt.show()
-# For the graph there are (2 * x) - 2 nodes
-"""
-n = 10
-weights = sorted(weights,key=lambda x: abs(x))
-weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
-threshold = 5
-threshold_test = ThresholdTest(weights, threshold)
-"""
+
+EXPERIMENT1 = False
+
+if EXPERIMENT1:
+    n = 8
+    weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+    weights = sorted(weights,key=lambda x: abs(x))
+    threshold = 0
+    test = ThresholdTest(weights, threshold)
+
+
+    with Timer("old_bfs (new heuristic)"):
+        counter_A = Counter(test.size)
+        old_bfs(test,counter=counter_A,priority_f=compute_priority_A)
+
+    with Timer("old_bfs (old heuristic)"):
+        counter_R = Counter(test.size)
+        old_bfs(test,counter=counter_R,priority_f=compute_priority_R)
+
+    plot_start()
+    plot_one(counter_A,plot_times=False,linestyle='-')
+    plot_one(counter_R,plot_times=False,linestyle=':')
+    plot_end()
+    exit()
+
+
+
 i, j = 0, 1 
 
 filename = f"data/digits/neuron-{i}-{j}.neuron"
