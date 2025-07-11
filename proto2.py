@@ -892,7 +892,6 @@ bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 image_file= f"data/csv/train-{i}-{j}.txt"
 image_data = np.loadtxt(image_file, delimiter=",")
 
-#file:///home/aidanboyce/work/projects/Research-Project/index.html
 output_dir = "output"
 f = open(f"index.html",'w')
 for image_index in range(20):
