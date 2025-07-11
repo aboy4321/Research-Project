@@ -3,10 +3,12 @@ __pycache__/
 *$py.class
 *.swo
 *.swp
+*.pdf
 *.png
 .proto.py
 .vscode
 *.neuron
+*.pickle
 *.txt
 plotting.py
 threshold_test.py
