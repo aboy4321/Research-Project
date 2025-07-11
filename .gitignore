@@ -8,6 +8,7 @@ __pycache__/
 .proto.py
 .vscode
 *.neuron
+*.pickle
 *.txt
 plotting.py
 threshold_test.py
