@@ -10,6 +10,4 @@ __pycache__/
 *.neuron
 *.pickle
 *.txt
-plotting.py
-threshold_test.py
 index.html

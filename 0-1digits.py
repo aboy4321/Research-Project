@@ -23,7 +23,7 @@ def generate_neuron():
             train_labels = train_features.pop(784)
 
             # train neuron
-            model = LogisticRegression(penalty='l1',solver='liblinear',C=.002,random_state=0) #tol=1e-8
+            model = LogisticRegression(penalty='l1',solver='liblinear',C=.003,random_state=0) #tol=1e-8
             classifier = model.fit(train_features,train_labels)
 
             # report accuracy by sklearn

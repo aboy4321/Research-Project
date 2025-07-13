@@ -59,7 +59,7 @@ if EXPERIMENT1:
     pickle_filename = "experiment1.pickle"
 
     #data = { 'counter_A': counter_A,
-    #         'counter_R': counter_R }
+    #        'counter_R': counter_R }
     with open(pickle_filename,'rb') as f:
         data = pickle.load(f)
 

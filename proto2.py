@@ -3,8 +3,8 @@ import heapq
 from timer import Timer
 import math
 import time
-#import numpy as np
-#from matplotlib import pyplot as plt
+import numpy as np
+from matplotlib import pyplot as plt
 #import pylab
 import pickle
 #import sys
@@ -724,7 +724,7 @@ def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, prune
 
     plt.xscale('log')
     plt.show()
-def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass, pruned_fail, test, counter_pruned=None, counter_bfs=None, counter_old=None):
+def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail, test, counter_bfs=None, counter_old=None):
     import matplotlib
     from matplotlib import pyplot as plt
 
@@ -741,15 +741,11 @@ def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail,pruned_pass,
     total = 2 ** test.size
     
     # Flipping the fail_list to start at the top and count down
-    pruned_fail = [total - fail for fail in pruned_fail] 
     bfs_fail = [total - fail for fail  in bfs_fail]
     old_bfs_fail = [total - fail for fail in old_bfs_fail]
     
     # Final count of the lists
     count = bfs_fail[-1]
-    pruned_counter = counter_pruned.count_times[:len(pruned_pass)]
-    plt.plot(pruned_counter,pruned_fail,color='red' , linestyle= ':')
-    plt.plot(pruned_counter,pruned_pass,color='blue' , linestyle= ':')
     bfs_counter = counter_bfs.count_times[:len(bfs_pass)]
     plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
     plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
@@ -854,20 +850,20 @@ def visualize_counterfactual(image, path):
     plt.imshow(overlay, cmap='gray', vmin=0, vmax=1)
     #plt.show()
 
-
 if __name__ == '__main__':
     EXPERIMENT1 = False
     EXPERIMENT2 = True
+    iterate = False
 
     if EXPERIMENT1:
         pickle_filename = "experiment1.pickle"
 
-        n = 8
-        weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+        n = 0
+       # weights = [ 2**x for x in range(n) ] + [ -2**x for x in range(n) ]
+        weights = [1]*n
         weights = sorted(weights,key=lambda x: abs(x))
         threshold = 0
         test = ThresholdTest(weights, threshold)
-
 
         with Timer("old_bfs (new heuristic)"):
             counter_A = Counter(test.size)
@@ -876,80 +872,93 @@ if __name__ == '__main__':
         with Timer("old_bfs (old heuristic)"):
             counter_R = Counter(test.size)
             old_bfs(test,counter=counter_R,priority_f=compute_priority_R)
-
+        """
         data = { 'counter_A': counter_A,
                  'counter_R': counter_R }
         with open(pickle_filename,'wb') as f:
             pickle.dump(data,f)
-
-        #plot_start()
-        #plot_one(counter_A,plot_times=False,linestyle='-')
-        #plot_one(counter_R,plot_times=False,linestyle=':')
-        #plot_end()
-        exit()
+        """
+        #Aplot.plot_start()
+        #Aplot.plot_one(counter_A,plot_times=False,linestyle='-')
+        #Aplot.plot_one(counter_R,plot_times=False,linestyle=':')
+        #Aplot.plot_end()
+        #exit()
 
     if EXPERIMENT2:
-        i, j = 0, 1 
+        if iterate == True:
+            for i in range(10):
+                for j in range(i+1, 10):
+                    print(f"Neuron{i}{j}")
+                    filename = f"data/digits/neuron-{i}-{j}.neuron"
+                    threshold_test = ThresholdTest.read(filename)
+                    pair = (i, j)
+                    #true_digit = threshold_test.classify(pair = pair)
+                    if PLOT_SEARCH_SPACE: plotter = TreePlotter()
+                    else:                 plotter = NullPlotter()
+                    """
+                    with Timer("dfs"):
+                        counter = Counter(threshold_test.size)
+                        form_tree(plotter, threshold_test, counter=counter)
+                        pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
+                    
+                    with Timer("truth table"):
+                        pass_list, fail_list = threshold_test.as_truth_table()
+                        pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
+                        pass_list, fail_list = threshold_test.as_truth_table()
+                        pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
+                    with Timer("old_bfs"):
+                        old_bfs_counter = Counter(threshold_test.size)
+                        old_bfs(threshold_test, counter=old_bfs_counter)
+                        old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
+                    """
+                    with Timer("bfs"):
+                        bfs_counter = Counter(threshold_test.size)
+                        bfs_form_tree(threshold_test, counter=bfs_counter)
+                        bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
 
-        filename = f"data/digits/neuron-{i}-{j}.neuron"
-        threshold_test = ThresholdTest.read(filename)
-        pair = (i, j)
-        #true_digit = threshold_test.classify(pair = pair)
-        # Print the decision path
-        if PLOT_SEARCH_SPACE: plotter = TreePlotter()
-        else:                 plotter = NullPlotter()
-        with Timer("dfs"):
-            counter = Counter(threshold_test.size)
-            form_tree(plotter, threshold_test, counter=counter)
-            pFail_list, pPass_list = counter.fail_counts, counter.pass_counts
-        """
-        with Timer("truth table"):
-            pass_list, fail_list = threshold_test.as_truth_table()
-            pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-            pass_list, fail_list = threshold_test.as_truth_table()
-            pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-        """
-        with Timer("old_bfs"):
-            old_bfs_counter = Counter(threshold_test.size)
-            old_bfs(threshold_test, counter=old_bfs_counter)
-            old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
-        with Timer("bfs"):
-            bfs_counter = Counter(threshold_test.size)
-            bfs_form_tree(threshold_test, counter=bfs_counter)
-            bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+                    #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
+                    #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
+                    #print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
+                    #print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
+                    #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
+                    #print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
+                    #print(f"model count: {threshold_test.model_count()}")
+                    #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
+                    #pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfs,Pass_list, old_bfsFail_list, threshold_test, counter_bfs=bfs_counter, counter_old=old_bfs_counter)
+                    bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 
-        #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
-        #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
-        #print(f"Graph node formula:                {threshold * (n - threshold + 1)}")
-        #print(f"Tree node formula:                   {math.comb(n+1, threshold) - 1}")
-        #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
-        #print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
-        #print(f"model count: {threshold_test.model_count()}")
+        if iterate == False:
+            i, j = 0,1
+            filename = f"data/digits/neuron-{i}-{j}.neuron"
+            threshold_test = ThresholdTest.read(filename)
+            pair = (i, j)
+            with Timer("bfs"):
+                bfs_counter = Counter(threshold_test.size)
+                bfs_form_tree(threshold_test, counter=bfs_counter)
+                bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+            bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 
-        #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-        pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfsPass_list, old_bfsFail_list, pPass_list, pFail_list, threshold_test, counter_pruned=counter,counter_bfs=bfs_counter, counter_old=old_bfs_counter)
-        bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
+        if iterate == True:
+            for i in range(10):
+                for j in range(i+1, 10):
 
-        import numpy as np
-        from matplotlib import pyplot as plt
-
-        image_file= f"data/csv/train-{i}-{j}.txt"
-        image_data = np.loadtxt(image_file, delimiter=",")
-
-        #file:///home/aidanboyce/work/projects/Research-Project/index.html
-        output_dir = "output"
-        f = open(f"index.html",'w')
-        for image_index in range(20):
-            image = image_data[image_index, :-1]
-            label = visualize_neuron(image, threshold_test)
-            print(f"{label} neuron: {image_index}")
-            neuron_filename = f"{output_dir}/neuron-{image_index}.png"
-            plt.savefig(neuron_filename)
-            path = robust(threshold_test,image, label)
-            visualize_counterfactual(image, path)
-            counter_filename = f"{output_dir}/counter-{image_index}.png"
-            plt.savefig(counter_filename)
-            f.write(f'label: {pair[int(label)]}')
-            f.write(f'<img src="{neuron_filename}">')
-            f.write(f'<img src="{counter_filename}"><br><br>\n')
-        f.close()
+                    image_file= f"data/csv/train-{i}-{j}.txt"
+                    image_data = np.loadtxt(image_file, delimiter=",")
+                    output_dir = "output"
+                    f = open(f"index.html",'w')
+                    for image_index in range(3):
+                        image = image_data[image_index, :-1]
+                        label = visualize_neuron(image, threshold_test)
+                        print(f"{i, j} neuron: {image_index}")
+                        neuron_filename = f"{output_dir}/neuron-{i}{j}.png"
+                        plt.savefig(neuron_filename)
+                        path = robust(threshold_test,image, label)
+                        visualize_counterfactual(image, path)
+                        counter_filename = f"{output_dir}/counter-{i}{j}.png"
+                        plt.savefig(counter_filename)
+                        f.write(f'label: {pair[int(label)]}')
+                        f.write(f'<img src="{neuron_filename}">')
+                        f.write(f'<img src="{counter_filename}"><br><br>\n')
+                    f.close()
+        else:
+            pass
