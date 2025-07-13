@@ -31,15 +31,17 @@ def plot_one(counter, plot_times=True, linestyle='-'):
     
     # Makes sure pass_list and flipped fail_list meet at the same endpoint
     
-    # Final count of the lists
-    count = pass_counts[-1]
     if plot_times:
         times = counter.count_times[:len(pass_counts)]
     else:
         times = list(range(1,len(pass_counts)+1))
     plt.plot(times,pass_counts, color='blue', linestyle=linestyle)
     plt.plot(times,fail_counts, color='red', linestyle=linestyle)
-    plt.axhline(y=count, linestyle='--', color="purple")
+
+    if pass_counts[-1] == fail_counts[-1]:
+        # Final count of the lists
+        count = pass_counts[-1]
+        plt.axhline(y=count, linestyle='--', color="purple")
 
 def plot_end():
     plt.xlabel('\\# of explanations')
@@ -53,7 +55,8 @@ def plot_end():
     plt.show()
 
 
-EXPERIMENT1 = True
+EXPERIMENT1 = False
+EXPERIMENT2 = True
 
 if EXPERIMENT1:
     pickle_filename = "experiment1.pickle"
@@ -68,3 +71,22 @@ if EXPERIMENT1:
     plot_one(data['counter_R'],plot_times=False,linestyle=':')
     plot_end()
     exit()
+
+if EXPERIMENT2:
+    pickle_filename = "experiment2.pickle"
+
+    with open(pickle_filename,'rb') as f:
+        data = pickle.load(f)
+
+    tree_times = [ data[(i,j,mode)] for i,j,mode in data if mode == 'tree' ]
+    graph_times = [ data[(i,j,mode)] for i,j,mode in data if mode == 'graph' ]
+
+    not_finished = sum( 1 for time in tree_times if time >= 60 )
+    finished = sum( 1 for time in tree_times if time < 60 )
+    fin_times = [ time for time in tree_times if time < 60 ]
+    print(f"tree: {finished}/{len(tree_times)} finished, avg. time: {np.mean(fin_times)}")
+
+    not_finished = sum( 1 for time in graph_times if time >= 60 )
+    finished = sum( 1 for time in graph_times if time < 60 )
+    fin_times = [ time for time in graph_times if time < 60 ]
+    print(f"graph: {finished}/{len(graph_times)} finished, avg. time: {np.mean(fin_times)}")

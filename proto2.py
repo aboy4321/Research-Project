@@ -3,15 +3,16 @@ import heapq
 from timer import Timer
 import math
 import time
-import numpy as np
-from matplotlib import pyplot as plt
+#import numpy as np
+#from matplotlib import pyplot as plt
 #import pylab
 import pickle
 #import sys
 #sys.setrecursionlimit(2048)
+from multiprocessing import Pool
 
 
-PLOT_SEARCH_SPACE = True
+PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -616,7 +617,7 @@ def robust(test, image, label):
             new_path = path + [(pixel_idx, value, next_value)] 
             heapq.heappush(heap, (cost+flip_cost, new_test, new_image, new_path))
 
-def old_bfs(test, counter=None, priority_f=compute_priority_R):
+def old_bfs(test, counter=None, priority_f=compute_priority_R, timeout=None):
     heap = []
     
     #p = steps_to_pass(test)
@@ -625,7 +626,14 @@ def old_bfs(test, counter=None, priority_f=compute_priority_R):
     priority = priority_f(test)
     heapq.heappush(heap,(priority, 0, test, None, None))
 
+    start_time = time.time()
+
     while heap:
+        if timeout is not None:
+            elapsed_time = time.time() - start_time
+            if elapsed_time > timeout:
+                return
+
         priority, depth, test, parent_test, edge_label = heapq.heappop(heap)
         
         if parent_test is not None:
@@ -853,7 +861,7 @@ def visualize_counterfactual(image, path):
 if __name__ == '__main__':
     EXPERIMENT1 = False
     EXPERIMENT2 = True
-    iterate = False
+    iterate = True
 
     if EXPERIMENT1:
         pickle_filename = "experiment1.pickle"
@@ -884,18 +892,50 @@ if __name__ == '__main__':
         #Aplot.plot_end()
         #exit()
 
+
+    def f(job):
+        i,j,threshold_test,timeout = job
+        tree_counter = Counter(threshold_test.size)
+        old_bfs(threshold_test, counter=tree_counter, priority_f=compute_priority_A, timeout=timeout)
+        graph_counter = Counter(threshold_test.size)
+        bfs_form_tree(threshold_test, counter=graph_counter)
+
+        #return (i,j,tree_counter,graph_counter)
+        return (i,j,tree_counter.count_times[-1],graph_counter.count_times[-1])
+
+    def f_wrapper(job):
+        result = None
+        try:
+            result = f(job)
+        except:
+            print('%s' % traceback.format_exc())
+        return result
+
     if EXPERIMENT2:
+        pickle_filename = "experiment2.pickle"
+        timeout = 60
+
         if iterate == True:
+            data = {}
+            jobs = []
+
+
             for i in range(10):
                 for j in range(i+1, 10):
                     print(f"Neuron{i}{j}")
                     filename = f"data/digits/neuron-{i}-{j}.neuron"
                     threshold_test = ThresholdTest.read(filename)
                     pair = (i, j)
+
+                    job = (i,j,threshold_test,timeout)
+                    jobs.append(job)
+
+                    """
                     #true_digit = threshold_test.classify(pair = pair)
                     if PLOT_SEARCH_SPACE: plotter = TreePlotter()
                     else:                 plotter = NullPlotter()
-                    """
+
+
                     with Timer("dfs"):
                         counter = Counter(threshold_test.size)
                         form_tree(plotter, threshold_test, counter=counter)
@@ -906,15 +946,20 @@ if __name__ == '__main__':
                         pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
                         pass_list, fail_list = threshold_test.as_truth_table()
                         pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-                    with Timer("old_bfs"):
+
+                    with Timer("bfs (tree)"):
                         old_bfs_counter = Counter(threshold_test.size)
-                        old_bfs(threshold_test, counter=old_bfs_counter)
-                        old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
-                    """
-                    with Timer("bfs"):
+                        old_bfs(threshold_test, counter=old_bfs_counter, priority_f=compute_priority_A, timeout=timeout)
+                        #old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
+
+                    with Timer("bfs (graph)"):
                         bfs_counter = Counter(threshold_test.size)
                         bfs_form_tree(threshold_test, counter=bfs_counter)
-                        bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+                        #bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+
+                    data[(i,j,"tree")] = old_bfs_counter
+                    data[(i,j,"graph")] = bfs_counter
+                    """
 
                     #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
                     #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
@@ -925,7 +970,18 @@ if __name__ == '__main__':
                     #print(f"model count: {threshold_test.model_count()}")
                     #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
                     #pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfs,Pass_list, old_bfsFail_list, threshold_test, counter_bfs=bfs_counter, counter_old=old_bfs_counter)
-                    bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
+                    #bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
+
+        poolsize = 4
+        pool = Pool(poolsize)
+        result = pool.map(f_wrapper,jobs)
+
+        for (i,j,tree_counter,graph_counter) in result:
+            data[(i,j,"tree")] = tree_counter
+            data[(i,j,"graph")] = graph_counter
+
+        with open(pickle_filename,'wb') as f:
+            pickle.dump(data,f)
 
         if iterate == False:
             i, j = 0,1
@@ -938,6 +994,7 @@ if __name__ == '__main__':
                 bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
             bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 
+        """
         if iterate == True:
             for i in range(10):
                 for j in range(i+1, 10):
@@ -962,3 +1019,4 @@ if __name__ == '__main__':
                     f.close()
         else:
             pass
+        """
