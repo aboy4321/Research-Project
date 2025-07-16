@@ -7,6 +7,7 @@ __pycache__/
 *.png
 .proto.py
 .vscode
+*.log
 *.neuron
 *.pickle
 *.txt

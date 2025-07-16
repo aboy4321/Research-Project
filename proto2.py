@@ -3,15 +3,16 @@ import heapq
 from timer import Timer
 import math
 import time
-import numpy as np
-from matplotlib import pyplot as plt
+#import numpy as np
+#from matplotlib import pyplot as plt
 #import pylab
 import pickle
 #import sys
 #sys.setrecursionlimit(2048)
+from multiprocessing import Pool
 
 
-PLOT_SEARCH_SPACE = True
+PLOT_SEARCH_SPACE = False
 
 class ThresholdTest:
     id_counter = 0 # next available id
@@ -226,21 +227,17 @@ class ThresholdTest:
         return count
     def get_last_idx(self, image):
         pass
-    def classify(self, image, pair=(0, 1)):
+    def classify(self, image):
         current = self
         path = []
-        image = image.reshape(28, 28)
         while True:
-            if current.is_trivial_pass():
-                return pair[0], path
-            if current.is_trivial_fail():
-                return pair[1], path
-            
-            var_idx = current.size  
-            weight = current.get_last_weight()
-            val = 1 if current.get_last_weight() > 0 else 0
-            path.append((var_idx, weight,val))
-            current = current.set_last_input(val) 
+            if current.is_trivial_pass(): return True
+            if current.is_trivial_fail(): return False
+
+            pixel_idx = current.indices[current.size-1]
+            pixel_value = image[pixel_idx]
+            bit = 1 if pixel_value > 0 else 0
+            current = current.set_last_input(bit) 
 
 # Class used to measure the upper and lower bounds of the threshold test    
 class Bounds():
@@ -362,37 +359,40 @@ class Counter:
         self.seen = {}       
         self.start_time = time.time()
         self.count_times = [0]
- 
+
     def is_trivial_and_count_old(self, test):
         total_counts = 2 ** test.size
-        self.count_times.append(time.time() - self.start_time)
+        count_time = time.time() - self.start_time
         if test.is_trivial_pass():
             self.passes += total_counts
             self.pass_counts.append(self.passes)
             self.fail_counts.append(self.fails)
+            self.count_times.append(count_time)
             return True
         if test.is_trivial_fail():
             self.fails += total_counts
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
-
+            self.count_times.append(count_time)
             return True
         return False
 
     def is_trivial_and_count(self, test):
         total_counts = 2 ** test.size
-        self.count_times.append(time.time() - self.start_time)
+        count_time = time.time() - self.start_time
         if test.is_trivial_pass():
             root_counts = self._propagate_count(test,[total_counts,0])
             self.passes += root_counts[0]
             self.pass_counts.append(self.passes)
             self.fail_counts.append(self.fails)
+            self.count_times.append(count_time)
             return True
         if test.is_trivial_fail():
             root_counts = self._propagate_count(test,[0,total_counts])
             self.fails += root_counts[1]
             self.fail_counts.append(self.fails)
             self.pass_counts.append(self.passes)
+            self.count_times.append(count_time)
             return True
         return False
 
@@ -616,7 +616,7 @@ def robust(test, image, label):
             new_path = path + [(pixel_idx, value, next_value)] 
             heapq.heappush(heap, (cost+flip_cost, new_test, new_image, new_path))
 
-def old_bfs(test, counter=None, priority_f=compute_priority_R):
+def old_bfs(test, counter=None, priority_f=compute_priority_R, timeout=None):
     heap = []
     
     #p = steps_to_pass(test)
@@ -625,7 +625,14 @@ def old_bfs(test, counter=None, priority_f=compute_priority_R):
     priority = priority_f(test)
     heapq.heappush(heap,(priority, 0, test, None, None))
 
+    start_time = time.time()
+
     while heap:
+        if timeout is not None:
+            elapsed_time = time.time() - start_time
+            if elapsed_time > timeout:
+                return
+
         priority, depth, test, parent_test, edge_label = heapq.heappop(heap)
         
         if parent_test is not None:
@@ -683,119 +690,9 @@ def steps_to_fail(test):
             # set input to 0
             ub -= weight
 
-# Graph showing the upper and lower bounds of the threshold test, and the steps taken to reach that number
-# Mainly going to be used to show the efficiency of our algorithm
 
-# The BFS, DFS and raw values are taken as parameters
-def pass_fail_graph(bfs_pass, bfs_fail, pass_list, fail_list, pruned_pass, pruned_fail, test):
-    import matplotlib
-    from matplotlib import pyplot as plt
 
-    font_size = 20
-
-    matplotlib.rcParams.update({'xtick.labelsize': font_size,
-                                'ytick.labelsize': font_size,
-                                'figure.autolayout': True})
-    font = {'family': 'sans-serif',
-            'weight': 'normal',
-            'size': 15}
-    matplotlib.rc('font', **font)
-    # computing the top value (this is 2^n)
-    total = 2 ** test.size
-    
-    # Flipping the fail_list to start at the top and count down
-    pruned_fail = [total - fail for fail in pruned_fail] 
-    fail_list = [total - fail for fail in fail_list] 
-    bfs_fail = [total - fail for fail  in bfs_fail]
-    
-    # Makes sure pass_list and flipped fail_list meet at the same endpoint
-    assert pass_list[-1] == fail_list[-1]
-    
-    # Final count of the lists
-    count = pass_list[-1]
-    
-    plt.plot(pass_list,color='blue',linestyle='-')
-    plt.plot(fail_list,color='red', linestyle='-')
-    plt.plot(pruned_fail,color='red' , linestyle= '-')
-    plt.plot(pruned_pass,color='blue' , linestyle= '-')
-    plt.plot(bfs_pass, color='magenta', linestyle='-')
-    plt.plot(bfs_fail,color='purple', linestyle='-') 
-    plt.axhline(y=count, linestyle='--', color="black")
-
-    plt.xscale('log')
-    plt.show()
-def pass_fail_graph2(bfs_pass, bfs_fail, old_bfs_pass, old_bfs_fail, test, counter_bfs=None, counter_old=None):
-    import matplotlib
-    from matplotlib import pyplot as plt
-
-    font_size = 20
-
-    matplotlib.rcParams.update({'xtick.labelsize': font_size,
-                                'ytick.labelsize': font_size,
-                                'figure.autolayout': True})
-    font = {'family': 'sans-serif',
-            'weight': 'normal',
-            'size': 15}
-    matplotlib.rc('font', **font)
-    # computing the top value (this is 2^n)
-    total = 2 ** test.size
-    
-    # Flipping the fail_list to start at the top and count down
-    bfs_fail = [total - fail for fail  in bfs_fail]
-    old_bfs_fail = [total - fail for fail in old_bfs_fail]
-    
-    # Final count of the lists
-    count = bfs_fail[-1]
-    bfs_counter = counter_bfs.count_times[:len(bfs_pass)]
-    plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
-    plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
-    oldbfs_counter = counter_old.count_times[:len(old_bfs_pass)]
-    plt.plot(oldbfs_counter,old_bfs_pass, color="blue", linestyle='-.')
-    plt.plot(oldbfs_counter,old_bfs_fail, color='red', linestyle='-.')
-    plt.axhline(y=count, linestyle='--', color="black")
-    plt.xscale("log")
-    plt.savefig("plot-log.png")
-    plt.xscale("linear")
-    plt.savefig("plot-linear.png")
-    plt.show()
-
-def bfs_graph(bfs_pass, bfs_fail, test, counter, plot_times=True):
-    import matplotlib
-    from matplotlib import pyplot as plt
-
-    font_size = 20
-
-    matplotlib.rcParams.update({'xtick.labelsize': font_size,
-                                'ytick.labelsize': font_size,
-                                'figure.autolayout': True})
-    font = {'family': 'sans-serif',
-            'weight': 'normal',
-            'size': 15}
-    matplotlib.rc('font', **font)
-    # computing the top value (this is 2^n)
-    total = 2 ** test.size
-    
-    # Flipping the fail_list to start at the top and count down
-    bfs_fail = [total - fail for fail  in bfs_fail]
-    
-    # Makes sure pass_list and flipped fail_list meet at the same endpoint
-    
-    # Final count of the lists
-    count = bfs_pass[-1]
-    if plot_times:
-        bfs_counter = counter.count_times[:len(bfs_pass)]
-    else:
-        bfs_counter = list(range(1,len(bfs_pass)+1))
-    plt.plot(bfs_counter,bfs_pass, color='blue', linestyle='-')
-    plt.plot(bfs_counter,bfs_fail,color='red', linestyle='-')
-    plt.axhline(y=count, linestyle='--', color="black")
-    plt.xscale("log")
-    plt.savefig("plot-log.png")
-    plt.xscale("linear")
-    plt.savefig("plot-linear.png")
-    plt.show()
-
-def visualize_neuron(train_data, test):
+def visualize_neuron(train_data, test, label=None):
     from matplotlib import pyplot as plt
 
     # initializing array
@@ -805,10 +702,27 @@ def visualize_neuron(train_data, test):
     path_bits = []
     while not (test.is_trivial_pass() or test.is_trivial_fail()):
         pixel_idx = test.indices[test.size-1]
-        path_pixels.append(pixel_idx)
         pixel_value = image[pixel_idx]
         bit = 1 if pixel_value > 0 else 0
-        path_bits.append(bit)
+
+        if label is None:
+            path_pixels.append(pixel_idx)
+            path_bits.append(bit)
+        else:
+            last_weight = test.get_last_weight()
+            if label is True: # pass
+                if ( last_weight > 0 and bit == 1 ) or \
+                   ( last_weight < 0 and bit == 0 ):
+                     path_pixels.append(pixel_idx)
+                     path_bits.append(bit)
+            elif label is False: # fail
+                if ( last_weight > 0 and bit == 0 ) or \
+                   ( last_weight < 0 and bit == 1 ):
+                     path_pixels.append(pixel_idx)
+                     path_bits.append(bit)
+            else:
+                raise Exception("unexpected label")
+
         test = test.set_last_input(bit)
 
     # increasing contrast
@@ -832,6 +746,7 @@ def visualize_neuron(train_data, test):
         return True
     if test.is_trivial_fail():
         return False
+
 def visualize_counterfactual(image, path):
     from matplotlib import pyplot as plt
 
@@ -853,7 +768,9 @@ def visualize_counterfactual(image, path):
 if __name__ == '__main__':
     EXPERIMENT1 = False
     EXPERIMENT2 = True
+    EXPERIMENT2b = False
     iterate = False
+    EXPERIMENT3 = False
 
     if EXPERIMENT1:
         pickle_filename = "experiment1.pickle"
@@ -884,18 +801,93 @@ if __name__ == '__main__':
         #Aplot.plot_end()
         #exit()
 
+    def make_uniform_threshold_test(n):
+        weights = [1]*n
+        weights = sorted(weights,key=lambda x: abs(x))
+        threshold = n//2
+        threshold_test = ThresholdTest(weights, threshold)
+        return threshold_test
+
+    if EXPERIMENT3:
+        pickle_filename = "experiment3.pickle"
+        timeout = 600
+
+        tree_ns = [ 10, 12, 14, 16, 18, 20, 22, 24 ]
+        graph_ns = tree_ns + [ 30, 50, 100, 250, 500, 750, 1000, 1250 ]
+
+        """
+        tree_times = []
+        for n in tree_ns:
+            threshold_test = make_uniform_threshold_test(n)
+            tree_counter = Counter(threshold_test.size)
+            start_time = time.time()
+            old_bfs(threshold_test, counter=tree_counter, priority_f=compute_priority_A, timeout=timeout)
+            run_time = time.time() - start_time
+            tree_times.append(run_time)
+            print("tree: n=%d time=%.4f" % (n,run_time))
+        """
+
+        graph_times = []
+        tree_times = []
+        for n in graph_ns:
+            threshold_test = make_uniform_threshold_test(n)
+            graph_counter = Counter(threshold_test.size)
+            start_time = time.time()
+            bfs_form_tree(threshold_test, counter=graph_counter)
+            run_time = time.time() - start_time
+            graph_times.append(run_time)
+            print("graph: n=%d time=%.4f" % (n,run_time))
+
+        data = { 'tree_ns': tree_ns,
+                 'tree_times': tree_times,
+                 'graph_ns': graph_ns,
+                 'graph_times': graph_times }
+        with open(pickle_filename,'wb') as f:
+            pickle.dump(data,f)
+
+    def f(job):
+        i,j,threshold_test,timeout = job
+        tree_counter = Counter(threshold_test.size)
+        old_bfs(threshold_test, counter=tree_counter, priority_f=compute_priority_A, timeout=timeout)
+        graph_counter = Counter(threshold_test.size)
+        bfs_form_tree(threshold_test, counter=graph_counter)
+
+        #return (i,j,tree_counter,graph_counter)
+        return (i,j,tree_counter.count_times[-1],graph_counter.count_times[-1])
+
+    def f_wrapper(job):
+        result = None
+        try:
+            result = f(job)
+        except:
+            print('%s' % traceback.format_exc())
+        return result
+
     if EXPERIMENT2:
+        pickle_filename = "experiment2.pickle"
+        timeout = 60
+
         if iterate == True:
+            data = {}
+            jobs = []
+
+
             for i in range(10):
                 for j in range(i+1, 10):
                     print(f"Neuron{i}{j}")
                     filename = f"data/digits/neuron-{i}-{j}.neuron"
                     threshold_test = ThresholdTest.read(filename)
                     pair = (i, j)
+
+                    job = (i,j,threshold_test,timeout)
+                    jobs.append(job)
+
+                    """
                     #true_digit = threshold_test.classify(pair = pair)
                     if PLOT_SEARCH_SPACE: plotter = TreePlotter()
                     else:                 plotter = NullPlotter()
-                    """
+
+
                     with Timer("dfs"):
                         counter = Counter(threshold_test.size)
                         form_tree(plotter, threshold_test, counter=counter)
@@ -906,15 +898,20 @@ if __name__ == '__main__':
                         pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
                         pass_list, fail_list = threshold_test.as_truth_table()
                         pass_list, fail_list = [pPass_list[-1]],[pFail_list[-1]]
-                    with Timer("old_bfs"):
+
+                    with Timer("bfs (tree)"):
                         old_bfs_counter = Counter(threshold_test.size)
-                        old_bfs(threshold_test, counter=old_bfs_counter)
-                        old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
-                    """
-                    with Timer("bfs"):
+                        old_bfs(threshold_test, counter=old_bfs_counter, priority_f=compute_priority_A, timeout=timeout)
+                        #old_bfsFail_list, old_bfsPass_list = old_bfs_counter.fail_counts, old_bfs_counter.pass_counts
+
+                    with Timer("bfs (graph)"):
                         bfs_counter = Counter(threshold_test.size)
                         bfs_form_tree(threshold_test, counter=bfs_counter)
-                        bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+                        #bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
+
+                    data[(i,j,"tree")] = old_bfs_counter
+                    data[(i,j,"graph")] = bfs_counter
+                    """
 
                     #plotter.draw_tree(threshold_test, filename="threshold_tree.png")
                     #plotter.draw_graph(threshold_test, filename="threshold_graph.png")
@@ -923,21 +920,39 @@ if __name__ == '__main__':
                     #print(f"tree node count (all):      {threshold_test.tree_node_count(only_internal=False)}")
                     #print(f"tree node count (internal): {threshold_test.tree_node_count(only_internal=True)}")
                     #print(f"model count: {threshold_test.model_count()}")
-                    #pass_fail_graph(bfsPass_list,bfsFail_list,pass_list, fail_list, pPass_list, pFail_list, threshold_test)
-                    #pass_fail_graph2(bfsPass_list, bfsFail_list, old_bfs,Pass_list, old_bfsFail_list, threshold_test, counter_bfs=bfs_counter, counter_old=old_bfs_counter)
-                    bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
+
+            poolsize = 4
+            pool = Pool(poolsize)
+            result = pool.map(f_wrapper,jobs)
+
+            for (i,j,tree_counter,graph_counter) in result:
+                data[(i,j,"tree")] = tree_counter
+                data[(i,j,"graph")] = graph_counter
+
+            with open(pickle_filename,'wb') as f:
+                pickle.dump(data,f)
 
         if iterate == False:
-            i, j = 0,1
+            i, j = 0,8
             filename = f"data/digits/neuron-{i}-{j}.neuron"
             threshold_test = ThresholdTest.read(filename)
             pair = (i, j)
-            with Timer("bfs"):
-                bfs_counter = Counter(threshold_test.size)
-                bfs_form_tree(threshold_test, counter=bfs_counter)
-                bfsFail_list, bfsPass_list = bfs_counter.fail_counts, bfs_counter.pass_counts  
-            bfs_graph(bfsPass_list, bfsFail_list, threshold_test, bfs_counter)
 
+            with Timer("tree"):
+                tree_counter = Counter(threshold_test.size)
+                old_bfs(threshold_test, counter=tree_counter, priority_f=compute_priority_A, timeout=timeout)
+            with Timer("graph"):
+                graph_counter = Counter(threshold_test.size)
+                bfs_form_tree(threshold_test, counter=graph_counter)
+
+            data = { 'tree': tree_counter,
+                     'graph': graph_counter }
+            with open(pickle_filename,'wb') as f:
+                pickle.dump(data,f)
+
+
+
+        """
         if iterate == True:
             for i in range(10):
                 for j in range(i+1, 10):
@@ -962,3 +977,44 @@ if __name__ == '__main__':
                     f.close()
         else:
             pass
+        """
+
+
+    if EXPERIMENT2b:
+        import numpy as np
+        from matplotlib import pyplot as plt
+
+        i,j = 0,8
+        pair = (i,j)
+
+        filename = f"data/digits/neuron-{i}-{j}.neuron"
+        threshold_test = ThresholdTest.read(filename)
+        graph_counter = Counter(threshold_test.size)
+        bfs_form_tree(threshold_test, counter=graph_counter)
+
+        image_file= f"data/csv/train-{i}-{j}.txt"
+        image_data = np.loadtxt(image_file, delimiter=",")
+        output_dir = "output"
+
+        f = open(f"index.html",'w')
+        for image_index in range(20):
+            image = image_data[image_index, :-1]
+            label = threshold_test.classify(image)
+            label = visualize_neuron(image, threshold_test, label=label)
+            print(f"{i, j} neuron: {image_index}")
+            neuron_basename = f"{output_dir}/neuron-{i}{j}-{image_index}"
+            plt.axis('off')
+            plt.savefig(neuron_basename + ".png")
+            #plt.savefig(neuron_basename + ".pdf")
+            path = robust(threshold_test,image, label)
+            visualize_counterfactual(image, path)
+            counter_basename = f"{output_dir}/counter-{i}{j}-{image_index}"
+            plt.axis('off')
+            plt.savefig(counter_basename + ".png")
+            #plt.savefig(counter_basename + ".pdf")
+            f.write('<hr><br>')
+            f.write(f'index: {image_index}<br>')
+            f.write(f'label: {pair[int(label)]}<br>')
+            f.write(f'<img src="{neuron_basename + ".png"}">')
+            f.write(f'<img src="{counter_basename + ".png"}"><br><br>\n')
+        f.close()
