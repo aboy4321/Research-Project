@@ -10,7 +10,6 @@ import pickle
 #import sys
 #sys.setrecursionlimit(2048)
 
-
 PLOT_SEARCH_SPACE = True
 
 class ThresholdTest:
