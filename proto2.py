@@ -265,14 +265,6 @@ class Bounds():
         return self.lb,self.ub
 
     # Measures the differences of the upper and lower bound from the respective threshold
-    def gap_size(self, test):
-
-        upper_diff = abs(self.upper_bound() - test.threshold)
-        lower_diff = abs(test.threshold - self.lower_bound())
-
-        score_list = [self.lower_bound(), lower_diff, test.threshold,upper_diff, self.upper_bound()]
-        return score_list
-
 class NullPlotter:
     def __init__(self): pass
     def add_node(self, node_id, label, color): pass
