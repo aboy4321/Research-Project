@@ -60,13 +60,10 @@ class ThresholdTest{
 
         shared_ptr<ThresholdTest> set_last(int value) const {
             int last_weight = get_last();
-            double nu_threshold = threshold;
+            int nu_threshold = threshold;
 
             if (value == 1) {
                 int nu_threshold = threshold - last_weight;
-            }
-            if (value == 0) {
-                int nu_threshold = threshold;
             }
 
             auto [lb, ub] = bounds.get_bounds();
