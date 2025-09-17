@@ -131,6 +131,11 @@ int main() {
     
     ThresholdTest test(weights, 2);
     cout << "original threshold:  " << test.get_threshold() << endl;
+    auto test_1 = test.set_last(1);
+    cout << "nu threshold after set_last:  " << test_1->get_threshold() << endl;
+
+    if (test_1->trivial_pass()) cout << "trivial pass  " << endl;
+    if (test_1->trivial_fail()) cout << "trivial fail  " << endl;
 
     return 0;
 }
